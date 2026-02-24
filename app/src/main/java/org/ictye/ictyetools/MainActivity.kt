@@ -406,7 +406,7 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
                 modifier = Modifier.fillMaxSize(),
                 color = stateColor,
                 trackColor = stateColor.copy(alpha = 0.2f),
-                strokeWidth = 12.dp
+                strokeWidth = 20.dp
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -533,12 +533,13 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                         (longBreakMinutes.toLongOrNull() ?: 15) * 60 * 1000L
                     )
                     mainActivity?.clockServiceBinder?.service?.resetTimer()
+                    showPomodoroSettings = false
                 }) {
                     Text("Save")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { }) {
+                TextButton(onClick = { showPomodoroSettings = false }) {
                     Text("Cancel")
                 }
             }
@@ -558,7 +559,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { }) {
+                TextButton(onClick = { showAbout = false }) {
                     Text("OK")
                 }
             }
@@ -582,7 +583,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
             leadingContent = {
                 Icon(Icons.Default.Refresh, contentDescription = null)
             },
-            modifier = Modifier.clickable { }
+            modifier = Modifier.clickable { showPomodoroSettings = true }
         )
         
         HorizontalDivider()
@@ -619,7 +620,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
             leadingContent = {
                 Icon(Icons.Default.Info, contentDescription = null)
             },
-            modifier = Modifier.clickable { }
+            modifier = Modifier.clickable { showAbout = true }
         )
     }
 }
