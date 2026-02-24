@@ -59,6 +59,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -66,9 +67,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import org.ictye.ictyetools.Dialogs.BackgroundDialog
-import org.ictye.ictyetools.Utils.ClockStateManager
-import org.ictye.ictyetools.Utils.TodoManager
+import org.ictye.ictyetools.dialogs.BackgroundDialog
+import org.ictye.ictyetools.utils.ClockStateManager
+import org.ictye.ictyetools.utils.TodoManager
 import org.ictye.ictyetools.ui.theme.IctyeToolsTheme
 import org.ictye.ictyetools.ui.theme.IdleColor
 import org.ictye.ictyetools.ui.theme.LongBreakColor
@@ -350,15 +351,10 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings")
-            }
-        }
-
+        TimerHeader(onSettingsClick = onSettingsClick)
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
         Text(
             text = stateText,
             style = MaterialTheme.typography.headlineMedium,
@@ -368,100 +364,20 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(280.dp)
-        ) {
-            CircularProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxSize(),
-                color = stateColor,
-                trackColor = stateColor.copy(alpha = 0.2f),
-                strokeWidth = 20.dp
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = formatTime(time),
-                    fontSize = 56.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Pomodoros: $completedPomodoros",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        TimerDisplay(
+            time = time,
+            completedPomodoros = completedPomodoros,
+            progress = progress,
+            stateColor = stateColor
+        )
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val buttonColor by animateColorAsState(
-                targetValue = if (isRunning) WorkColor else ShortBreakColor,
-                animationSpec = tween(durationMillis = 500),
-                label = "buttonColor"
-            )
-            
-            FilledIconButton(
-                onClick = {
-                    mainActivity.startClockService()
-                    mainActivity.clockServiceBinder?.service?.stopTimer()
-                },
-                modifier = Modifier.size(56.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Icon(
-                    painterResource(R.drawable.stop_light),
-                    contentDescription = "Stop",
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-
-            FilledIconButton(
-                onClick = {
-                    mainActivity.startClockService()
-                    val service = mainActivity.clockServiceBinder?.service
-                    if (state == PomodoroState.PAUSED) {
-                        service?.startTimer()
-                    } else if (isRunning) {
-                        service?.pauseTimer()
-                    } else {
-                        service?.startTimer()
-                    }
-                },
-                modifier = Modifier.size(80.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = buttonColor
-                )
-            ) {
-                Icon(
-                    painterResource(if (isRunning) R.drawable.pause_light else R.drawable.play_light),
-                    contentDescription = "Play/Pause",
-                    modifier = Modifier.size(44.dp),
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-
-            FilledIconButton(
-                onClick = {
-                    mainActivity.bindServiceWithoutRestore()
-                    mainActivity.clockServiceBinder?.service?.resetTimer()
-                },
-                modifier = Modifier.size(56.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset")
-            }
-        }
+        TimerControls(
+            isRunning = isRunning,
+            state = state,
+            mainActivity = mainActivity
+        )
     }
 }
 
@@ -471,6 +387,126 @@ private fun formatTime(millis: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
+}
+
+@Composable
+private fun TimerHeader(onSettingsClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        IconButton(onClick = onSettingsClick) {
+            Icon(Icons.Default.Settings, contentDescription = "Settings")
+        }
+    }
+}
+
+@Composable
+private fun TimerDisplay(
+    time: Long,
+    completedPomodoros: Int,
+    progress: Float,
+    stateColor: Color
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(280.dp)
+    ) {
+        CircularProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxSize(),
+            color = stateColor,
+            trackColor = stateColor.copy(alpha = 0.2f),
+            strokeWidth = 20.dp
+        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = formatTime(time),
+                fontSize = 56.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Pomodoros: $completedPomodoros",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimerControls(
+    isRunning: Boolean,
+    state: PomodoroState,
+    mainActivity: MainActivity
+) {
+    val buttonColor by animateColorAsState(
+        targetValue = if (isRunning) WorkColor else ShortBreakColor,
+        animationSpec = tween(durationMillis = 500),
+        label = "buttonColor"
+    )
+    
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilledIconButton(
+            onClick = {
+                mainActivity.startClockService()
+                mainActivity.clockServiceBinder?.service?.stopTimer()
+            },
+            modifier = Modifier.size(56.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer
+            )
+        ) {
+            Icon(
+                painterResource(R.drawable.stop_light),
+                contentDescription = "Stop",
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
+
+        FilledIconButton(
+            onClick = {
+                mainActivity.startClockService()
+                val service = mainActivity.clockServiceBinder?.service
+                if (state == PomodoroState.PAUSED) {
+                    service?.startTimer()
+                } else if (isRunning) {
+                    service?.pauseTimer()
+                } else {
+                    service?.startTimer()
+                }
+            },
+            modifier = Modifier.size(80.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = buttonColor
+            )
+        ) {
+            Icon(
+                painterResource(if (isRunning) R.drawable.pause_light else R.drawable.play_light),
+                contentDescription = "Play/Pause",
+                modifier = Modifier.size(44.dp),
+                tint = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
+
+        FilledIconButton(
+            onClick = {
+                mainActivity.bindServiceWithoutRestore()
+                mainActivity.clockServiceBinder?.service?.resetTimer()
+            },
+            modifier = Modifier.size(56.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = "Reset")
+        }
+    }
 }
 
 enum class AppDestinations(

@@ -1,4 +1,4 @@
-package org.ictye.ictyetools.Dialogs
+package org.ictye.ictyetools.dialogs
 
 import android.annotation.SuppressLint
 import android.content.Context

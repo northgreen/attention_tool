@@ -17,7 +17,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat.Builder
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import org.ictye.ictyetools.Utils.ClockStateManager
+import org.ictye.ictyetools.utils.ClockStateManager
 
 enum class PomodoroState {
     IDLE,
