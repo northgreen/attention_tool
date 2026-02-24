@@ -103,7 +103,7 @@ class ClockService : Service() {
         val notification = Builder( this, CHANNEL_ID )
             .setContentTitle("Pomodoro Timer")
             .setContentText("Ready to start")
-            .setSmallIcon(R.drawable.ic_clock)
+            .setSmallIcon(R.drawable.clock)
 
         startForeground(NOTIFICATION_ID, notification.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         
@@ -329,7 +329,7 @@ class ClockService : Service() {
         val notification = Builder( this, CHANNEL_ID )
             .setContentTitle("Pomodoro Timer")
             .setContentText(text)
-            .setSmallIcon(R.drawable.ic_clock)
+            .setSmallIcon(R.drawable.clock)
             .setOngoing(true)
             .setSilent(true)
             .setContentIntent(pendingIntent)

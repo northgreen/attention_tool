@@ -1,15 +1,19 @@
 package org.ictye.ictyetools
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -31,6 +35,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -38,14 +43,15 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,13 +73,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
-import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -82,17 +84,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.delay
 import org.ictye.ictyetools.ui.theme.IctyeToolsTheme
 import org.ictye.ictyetools.ui.theme.IdleColor
 import org.ictye.ictyetools.ui.theme.LongBreakColor
 import org.ictye.ictyetools.ui.theme.ShortBreakColor
 import org.ictye.ictyetools.ui.theme.WorkColor
 import androidx.core.net.toUri
+import java.io.File
 
 
 class MainActivity : ComponentActivity() {
@@ -138,7 +143,7 @@ class MainActivity : ComponentActivity() {
                     action = if (restore) "RESTORE" else null
                 }
                 startService(serviceIntent)
-                bindService(serviceIntent, clockServiceConnection, Context.BIND_AUTO_CREATE)
+                bindService(serviceIntent, clockServiceConnection, BIND_AUTO_CREATE)
                 isBound = true
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -172,8 +177,8 @@ class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     fun startClockService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 return
             }
         }
@@ -184,7 +189,7 @@ class MainActivity : ComponentActivity() {
     private fun checkBackgroundRestriction() {
         if (hasShownBackgroundRestrictionDialog) return
         
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         val packageName = packageName
         
         val isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(packageName)
@@ -201,7 +206,7 @@ class MainActivity : ComponentActivity() {
             checkBackgroundRestriction()
             val serviceIntent = Intent(this, ClockService::class.java)
             startForegroundService(serviceIntent)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            Handler(Looper.getMainLooper()).postDelayed({
                 bindServiceIfNeeded(restore = true)
             }, 500)
         }
@@ -224,7 +229,6 @@ class MainActivity : ComponentActivity() {
 
 @SuppressLint("BatteryLife")
 @RequiresApi(Build.VERSION_CODES.O)
-@PreviewScreenSizes
 @Composable
 fun PomodoroApp(
     showBackgroundDialog: Boolean = false,
@@ -275,10 +279,17 @@ fun PomodoroApp(
             AppDestinations.entries.forEach {
                 item(
                     icon = {
-                        Icon(
-                            it.icon,
-                            contentDescription = it.label
-                        )
+                        if (it == AppDestinations.HOME) {
+                            Icon(
+                                painter = painterResource(R.drawable.clock),
+                                contentDescription = it.label
+                            )
+                        } else {
+                            Icon(
+                                it.icon,
+                                contentDescription = it.label
+                            )
+                        }
                     },
                     label = { Text(it.label) },
                     selected = it == currentDestination,
@@ -428,7 +439,12 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 )
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Stop")
+                Icon(
+                    painterResource(R.drawable.stop_light),
+                    contentDescription = "Stop",
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
             }
 
             FilledIconButton(
@@ -448,10 +464,11 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
                     containerColor = if (isRunning) WorkColor else ShortBreakColor
                 )
             ) {
-                Text(
-                    text = if (state == PomodoroState.PAUSED) "▶" else if (isRunning) "||" else "▶",
-                    fontSize = 24.sp,
-                    color = MaterialTheme.colorScheme.onPrimary
+                Icon(
+                    painterResource(if (isRunning) R.drawable.pause_light else R.drawable.play_light),
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(44.dp),
+                    tint = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
 
@@ -577,9 +594,9 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                 Icon(Icons.Default.Share, contentDescription = null)
             },
             modifier = Modifier.clickable {
-                val file = java.io.File(TodoManager.getTodoFilePath())
+                val file = File(TodoManager.getTodoFilePath())
                 if (file.exists()) {
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                    val uri = FileProvider.getUriForFile(
                         context,
                         "${context.packageName}.fileprovider",
                         file
@@ -687,150 +704,153 @@ fun TodoScreen(modifier: Modifier = Modifier) {
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            itemsIndexed(sortedTodos) { _, todo ->
-                val originalIndex = todos.indexOf(todo)
-                val dismissState = rememberSwipeToDismissBoxState(
-                    confirmValueChange = { value ->
-                        if (value == SwipeToDismissBoxValue.EndToStart && originalIndex >= 0) {
-                            TodoManager.deleteTodo(originalIndex)
-                            todos = TodoManager.loadTodos()
-                            true
-                        } else {
-                            false
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(sortedTodos) { _, todo ->
+                    val originalIndex = todos.indexOf(todo)
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart && originalIndex >= 0) {
+                                TodoManager.deleteTodo(originalIndex)
+                                todos = TodoManager.loadTodos()
+                                true
+                            } else {
+                                false
+                            }
                         }
-                    }
-                )
-                
-                SwipeToDismissBox(
-                    state = dismissState,
-                    backgroundContent = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.errorContainer)
-                                .padding(horizontal = 20.dp),
-                            contentAlignment = Alignment.CenterEnd
-                        ) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    },
-                    content = {
-                        ListItem(
-                            modifier = Modifier.clickable {
-                                if (originalIndex >= 0) {
-                                    val item = todos[originalIndex]
-                                    editingTodoIndex = originalIndex
-                                    editingTodoText = item.text
-                                    editingTodoPriority = item.priority
-                                    editingTodoCreationDate = item.creationDate ?: ""
-                                    editingTodoDueDate = item.dueDate ?: ""
-                                    editingTodoTags = item.tags.joinToString(", ")
-                                }
-                            },
-                            headlineContent = {
-                                Text(
-                                    text = todo.text,
-                                    color = if (todo.isCompleted) 
-                                        MaterialTheme.colorScheme.onSurfaceVariant 
-                                    else MaterialTheme.colorScheme.onSurface,
-                                    style = if (todo.isCompleted)
-                                        MaterialTheme.typography.bodyLarge.copy(
-                                            textDecoration = TextDecoration.LineThrough
-                                        )
-                                    else MaterialTheme.typography.bodyLarge
+                    )
+                    
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.errorContainer)
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer
                                 )
-                            },
-                            supportingContent = {
-                                Column {
-                                    if (todo.priority != null || todo.projects.isNotEmpty() || todo.creationDate != null || todo.dueDate != null || todo.tags.isNotEmpty()) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            todo.priority?.let {
-                                                Text(
-                                                    text = "($it)",
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                            todo.projects.forEach { project ->
-                                                Text(
-                                                    text = "+$project",
-                                                    color = MaterialTheme.colorScheme.secondary
-                                                )
-                                            }
-                                            todo.creationDate?.let {
-                                                Text(
-                                                    text = it,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            todo.dueDate?.let {
-                                                Text(
-                                                    text = "Due: $it",
-                                                    color = MaterialTheme.colorScheme.error
-                                                )
-                                            }
-                                            todo.tags.forEach { tag ->
-                                                Text(
-                                                    text = "#$tag",
-                                                    color = MaterialTheme.colorScheme.tertiary
-                                                )
+                            }
+                        },
+                        content = {
+                            ListItem(
+                                modifier = Modifier.clickable {
+                                    if (originalIndex >= 0) {
+                                        val item = todos[originalIndex]
+                                        editingTodoIndex = originalIndex
+                                        editingTodoText = item.text
+                                        editingTodoPriority = item.priority
+                                        editingTodoCreationDate = item.creationDate ?: ""
+                                        editingTodoDueDate = item.dueDate ?: ""
+                                        editingTodoTags = item.tags.joinToString(", ")
+                                    }
+                                },
+                                headlineContent = {
+                                    Text(
+                                        text = todo.text,
+                                        color = if (todo.isCompleted) 
+                                            MaterialTheme.colorScheme.onSurfaceVariant 
+                                        else MaterialTheme.colorScheme.onSurface,
+                                        style = if (todo.isCompleted)
+                                            MaterialTheme.typography.bodyLarge.copy(
+                                                textDecoration = TextDecoration.LineThrough
+                                            )
+                                    else MaterialTheme.typography.bodyLarge
+                                    )
+                                },
+                                supportingContent = {
+                                    Column {
+                                        if (todo.priority != null || todo.projects.isNotEmpty() || todo.creationDate != null || todo.dueDate != null || todo.tags.isNotEmpty()) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                todo.priority?.let {
+                                                    Text(
+                                                        text = "($it)",
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                todo.projects.forEach { project ->
+                                                    Text(
+                                                        text = "+$project",
+                                                        color = MaterialTheme.colorScheme.secondary
+                                                    )
+                                                }
+                                                todo.creationDate?.let {
+                                                    Text(
+                                                        text = it,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                todo.dueDate?.let {
+                                                    Text(
+                                                        text = "Due: $it",
+                                                        color = MaterialTheme.colorScheme.error
+                                                    )
+                                                }
+                                                todo.tags.forEach { tag ->
+                                                    Text(
+                                                        text = "#$tag",
+                                                        color = MaterialTheme.colorScheme.tertiary
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            },
-                            leadingContent = {
-                                Checkbox(
-                                    checked = todo.isCompleted,
-                                    onCheckedChange = {
+                                },
+                                leadingContent = {
+                                    Checkbox(
+                                        checked = todo.isCompleted,
+                                        onCheckedChange = {
+                                            if (originalIndex >= 0) {
+                                                TodoManager.toggleComplete(originalIndex)
+                                                todos = TodoManager.loadTodos()
+                                            }
+                                        }
+                                    )
+                                },
+                                trailingContent = {
+                                    IconButton(onClick = {
                                         if (originalIndex >= 0) {
-                                            TodoManager.toggleComplete(originalIndex)
+                                            TodoManager.deleteTodo(originalIndex)
                                             todos = TodoManager.loadTodos()
                                         }
+                                    }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                     }
-                                )
-                            },
-                            trailingContent = {
-                                IconButton(onClick = {
-                                    if (originalIndex >= 0) {
-                                        TodoManager.deleteTodo(originalIndex)
-                                        todos = TodoManager.loadTodos()
-                                    }
-                                }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
                                 }
-                            }
-                        )
-                    }
+                            )
+                        }
+                    )
+                }
+            }
+            
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add, 
+                    contentDescription = "Add todo"
                 )
             }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        FilledIconButton(
-            onClick = { showAddDialog = true },
-            modifier = Modifier
-                .align(Alignment.End)
-                .size(64.dp)
-        ) {
-            Icon(
-                Icons.Default.Add, 
-                contentDescription = "Add todo",
-                modifier = Modifier.size(32.dp)
-            )
         }
     }
     
@@ -1095,6 +1115,6 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("Pomodoro", Icons.Default.Refresh),
-    TODO("Todo", Icons.Default.List),
+    TODO("Todo", Icons.AutoMirrored.Filled.List),
     SETTINGS("Settings", Icons.Default.Settings)
 }
