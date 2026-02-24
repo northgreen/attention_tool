@@ -94,11 +94,6 @@ import org.ictye.ictyetools.ui.theme.ShortBreakColor
 import org.ictye.ictyetools.ui.theme.WorkColor
 import androidx.core.net.toUri
 
-object ClockStateHolder {
-    var currentTime: Long = ClockService.WORK_DURATION
-    var state: PomodoroState = PomodoroState.IDLE
-    var completed: Int = 0
-}
 
 class MainActivity : ComponentActivity() {
     var clockServiceBinder: ClockService.ClockBinder? = null
@@ -219,6 +214,8 @@ class MainActivity : ComponentActivity() {
                 unbindService(clockServiceConnection)
             } catch (e: Exception) {
                 // 可能已经解绑了
+                println("onDestroy: 尝试解绑服务时发生异常")
+                e.printStackTrace()
             }
             isBound = false
         }
@@ -519,13 +516,12 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                         (longBreakMinutes.toLongOrNull() ?: 15) * 60 * 1000L
                     )
                     mainActivity?.clockServiceBinder?.service?.resetTimer()
-                    showPomodoroSettings = false
                 }) {
                     Text("Save")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showPomodoroSettings = false }) {
+                TextButton(onClick = { }) {
                     Text("Cancel")
                 }
             }
@@ -534,7 +530,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
     
     if (showAbout) {
         AlertDialog(
-            onDismissRequest = { showAbout = false },
+            onDismissRequest = { },
             title = { Text("About") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -545,7 +541,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showAbout = false }) {
+                TextButton(onClick = { }) {
                     Text("OK")
                 }
             }
@@ -569,7 +565,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
             leadingContent = {
                 Icon(Icons.Default.Refresh, contentDescription = null)
             },
-            modifier = Modifier.clickable { showPomodoroSettings = true }
+            modifier = Modifier.clickable { }
         )
         
         HorizontalDivider()
@@ -606,7 +602,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
             leadingContent = {
                 Icon(Icons.Default.Info, contentDescription = null)
             },
-            modifier = Modifier.clickable { showAbout = true }
+            modifier = Modifier.clickable { }
         )
     }
 }
@@ -621,6 +617,12 @@ fun TodoScreen(modifier: Modifier = Modifier) {
     var newTodoDueDate by remember { mutableStateOf("") }
     var newTodoTags by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
+    var editingTodoIndex by remember { mutableStateOf<Int?>(null) }
+    var editingTodoText by remember { mutableStateOf("") }
+    var editingTodoPriority by remember { mutableStateOf<Char?>(null) }
+    var editingTodoCreationDate by remember { mutableStateOf("") }
+    var editingTodoDueDate by remember { mutableStateOf("") }
+    var editingTodoTags by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("priority") }
     var ascending by remember { mutableStateOf(true) }
     
@@ -722,6 +724,17 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                     },
                     content = {
                         ListItem(
+                            modifier = Modifier.clickable {
+                                if (originalIndex >= 0) {
+                                    val item = todos[originalIndex]
+                                    editingTodoIndex = originalIndex
+                                    editingTodoText = item.text
+                                    editingTodoPriority = item.priority
+                                    editingTodoCreationDate = item.creationDate ?: ""
+                                    editingTodoDueDate = item.dueDate ?: ""
+                                    editingTodoTags = item.tags.joinToString(", ")
+                                }
+                            },
                             headlineContent = {
                                 Text(
                                     text = todo.text,
@@ -825,7 +838,7 @@ fun TodoScreen(modifier: Modifier = Modifier) {
         var expanded by remember { mutableStateOf(false) }
         
         AlertDialog(
-            onDismissRequest = { showAddDialog = false },
+            onDismissRequest = { },
             title = { Text("Add Todo") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -915,6 +928,98 @@ fun TodoScreen(modifier: Modifier = Modifier) {
             },
             dismissButton = {
                 TextButton(onClick = { showAddDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    if (editingTodoIndex != null) {
+        var expanded by remember { mutableStateOf(false) }
+        
+        AlertDialog(
+            onDismissRequest = { editingTodoIndex = null },
+            title = { Text("Edit Todo") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = editingTodoText,
+                        onValueChange = { editingTodoText = it },
+                        label = { Text("Task") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = editingTodoPriority?.toString() ?: "None",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Priority") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("None") },
+                                onClick = {
+                                    editingTodoPriority = null
+                                    expanded = false
+                                }
+                            )
+                            listOf("A", "B", "C", "D", "E").forEach { priority ->
+                                DropdownMenuItem(
+                                    text = { Text(priority) },
+                                    onClick = {
+                                        editingTodoPriority = priority.first()
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = editingTodoCreationDate,
+                        onValueChange = { editingTodoCreationDate = it },
+                        label = { Text("Creation Date (YYYY-MM-DD)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editingTodoDueDate,
+                        onValueChange = { editingTodoDueDate = it },
+                        label = { Text("Due Date (YYYY-MM-DD)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = editingTodoTags,
+                        onValueChange = { editingTodoTags = it },
+                        label = { Text("Tags (comma separated)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (editingTodoText.isNotBlank() && editingTodoIndex != null) {
+                        val creationDate = editingTodoCreationDate.takeIf { it.isNotBlank() }
+                        val dueDate = editingTodoDueDate.takeIf { it.isNotBlank() }
+                        val tags = editingTodoTags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        TodoManager.updateTodo(editingTodoIndex!!, editingTodoText, editingTodoPriority, creationDate, dueDate, tags)
+                        todos = TodoManager.loadTodos()
+                        editingTodoIndex = null
+                    }
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingTodoIndex = null }) {
                     Text("Cancel")
                 }
             }
