@@ -16,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,12 +39,14 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -109,7 +112,8 @@ class MainActivity : ComponentActivity() {
         
         ClockStateManager.init(this)
         TodoManager.init(this)
-        bindServiceIfNeeded()
+        
+        handleIntent(intent)
 
         enableEdgeToEdge()
         setContent {
@@ -120,6 +124,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+    
+    private fun handleIntent(intent: Intent?) {
+        val shouldRestore = intent?.action == "FROM_NOTIFICATION"
+        bindServiceIfNeeded(restore = shouldRestore)
     }
     
     private fun bindServiceIfNeeded(restore: Boolean = false) {
@@ -272,11 +286,7 @@ fun PomodoroApp(
                     label = { Text(it.label) },
                     selected = it == currentDestination,
                     onClick = {
-                        if (it == AppDestinations.SETTINGS) {
-                            showSettings = true
-                        } else {
-                            currentDestination = it
-                        }
+                        currentDestination = it
                     }
                 )
             }
@@ -286,10 +296,13 @@ fun PomodoroApp(
             when (currentDestination) {
                 AppDestinations.HOME -> PomodoroTimerScreen(
                     modifier = Modifier.padding(innerPadding),
-                    onSettingsClick = { showSettings = true }
+                    onSettingsClick = { currentDestination = AppDestinations.SETTINGS }
                 )
                 AppDestinations.TODO -> TodoScreen(modifier = Modifier.padding(innerPadding))
-                AppDestinations.SETTINGS -> {}
+                AppDestinations.SETTINGS -> SettingsScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    onNavigateBack = { currentDestination = AppDestinations.HOME }
+                )
             }
         }
     }
@@ -461,29 +474,176 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
     }
 }
 
+@Composable
+fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
+    val context = LocalContext.current
+    val mainActivity = context as? MainActivity
+    
+    var showPomodoroSettings by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
+    var workMinutes by rememberSaveable { mutableStateOf("25") }
+    var shortBreakMinutes by rememberSaveable { mutableStateOf("5") }
+    var longBreakMinutes by rememberSaveable { mutableStateOf("15") }
+    
+    if (showPomodoroSettings) {
+        AlertDialog(
+            onDismissRequest = { showPomodoroSettings = false },
+            title = { Text("Pomodoro Settings") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = workMinutes,
+                        onValueChange = { workMinutes = it },
+                        label = { Text("Work Duration (minutes)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = shortBreakMinutes,
+                        onValueChange = { shortBreakMinutes = it },
+                        label = { Text("Short Break (minutes)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = longBreakMinutes,
+                        onValueChange = { longBreakMinutes = it },
+                        label = { Text("Long Break (minutes)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    mainActivity?.clockServiceBinder?.service?.setDurations(
+                        (workMinutes.toLongOrNull() ?: 25) * 60 * 1000L,
+                        (shortBreakMinutes.toLongOrNull() ?: 5) * 60 * 1000L,
+                        (longBreakMinutes.toLongOrNull() ?: 15) * 60 * 1000L
+                    )
+                    mainActivity?.clockServiceBinder?.service?.resetTimer()
+                    showPomodoroSettings = false
+                }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPomodoroSettings = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    if (showAbout) {
+        AlertDialog(
+            onDismissRequest = { showAbout = false },
+            title = { Text("About") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("IctyeTools", fontWeight = FontWeight.Bold)
+                    Text("Version 1.0.0")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("A Pomodoro Timer with Todo list functionality.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAbout = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+    
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Settings",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        
+        ListItem(
+            headlineContent = { Text("Pomodoro Timer") },
+            supportingContent = { Text("Configure work/break durations") },
+            leadingContent = {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+            },
+            modifier = Modifier.clickable { showPomodoroSettings = true }
+        )
+        
+        HorizontalDivider()
+        
+        ListItem(
+            headlineContent = { Text("Export Todo") },
+            supportingContent = { Text("Share todo.txt file") },
+            leadingContent = {
+                Icon(Icons.Default.Share, contentDescription = null)
+            },
+            modifier = Modifier.clickable {
+                val file = java.io.File(TodoManager.getTodoFilePath())
+                if (file.exists()) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "Export Todo"))
+                }
+            }
+        )
+        
+        HorizontalDivider()
+        
+        ListItem(
+            headlineContent = { Text("About") },
+            supportingContent = { Text("App information") },
+            leadingContent = {
+                Icon(Icons.Default.Info, contentDescription = null)
+            },
+            modifier = Modifier.clickable { showAbout = true }
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoScreen(modifier: Modifier = Modifier) {
     var todos by remember { mutableStateOf(TodoManager.loadTodos()) }
     var newTodoText by remember { mutableStateOf("") }
     var newTodoPriority by remember { mutableStateOf<Char?>(null) }
+    var newTodoCreationDate by remember { mutableStateOf("") }
+    var newTodoDueDate by remember { mutableStateOf("") }
+    var newTodoTags by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var sortBy by remember { mutableStateOf("priority") }
-    var ascending by remember { mutableStateOf(false) }
+    var ascending by remember { mutableStateOf(true) }
     
     val sortedTodos = remember(todos, sortBy, ascending) {
-        val sorted = when (sortBy) {
+        when (sortBy) {
             "priority" -> {
-                val base = todos.sortedWith(compareBy({ it.isCompleted }, { -(it.priority?.code ?: 999) }))
-                if (ascending) base else base.reversed()
+                val uncompleted = todos.filter { !it.isCompleted }.sortedWith(
+                    compareBy { if (it.priority == null) 0 else ('Z' - it.priority + 1) }
+                )
+                val completed = todos.filter { it.isCompleted }
+                if (ascending) uncompleted + completed else uncompleted.reversed() + completed
             }
             "alpha" -> {
-                val base = todos.sortedWith(compareBy({ it.isCompleted }, { it.text.lowercase() }))
-                if (ascending) base else base.reversed()
+                val uncompleted = todos.filter { !it.isCompleted }.sortedBy { it.text.lowercase() }
+                val completed = todos.filter { it.isCompleted }
+                if (ascending) uncompleted + completed else uncompleted.reversed() + completed
             }
-            else -> todos
+            else -> {
+                val uncompleted = todos.filter { !it.isCompleted }
+                val completed = todos.filter { it.isCompleted }
+                uncompleted + completed
+            }
         }
-        sorted
     }
     
     Column(
@@ -576,20 +736,40 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                                 )
                             },
                             supportingContent = {
-                                if (todo.priority != null || todo.projects.isNotEmpty()) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        todo.priority?.let {
-                                            Text(
-                                                text = "($it)",
-                                                color = MaterialTheme.colorScheme.primary,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        todo.projects.forEach { project ->
-                                            Text(
-                                                text = "+$project",
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
+                                Column {
+                                    if (todo.priority != null || todo.projects.isNotEmpty() || todo.creationDate != null || todo.dueDate != null || todo.tags.isNotEmpty()) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            todo.priority?.let {
+                                                Text(
+                                                    text = "($it)",
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            todo.projects.forEach { project ->
+                                                Text(
+                                                    text = "+$project",
+                                                    color = MaterialTheme.colorScheme.secondary
+                                                )
+                                            }
+                                            todo.creationDate?.let {
+                                                Text(
+                                                    text = it,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            todo.dueDate?.let {
+                                                Text(
+                                                    text = "Due: $it",
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                            todo.tags.forEach { tag ->
+                                                Text(
+                                                    text = "#$tag",
+                                                    color = MaterialTheme.colorScheme.tertiary
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -691,15 +871,42 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                             }
                         }
                     }
+                    OutlinedTextField(
+                        value = newTodoCreationDate,
+                        onValueChange = { newTodoCreationDate = it },
+                        label = { Text("Creation Date (YYYY-MM-DD)") },
+                        placeholder = { Text("Leave empty for today") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newTodoDueDate,
+                        onValueChange = { newTodoDueDate = it },
+                        label = { Text("Due Date (YYYY-MM-DD)") },
+                        placeholder = { Text("Optional") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newTodoTags,
+                        onValueChange = { newTodoTags = it },
+                        label = { Text("Tags (comma separated)") },
+                        placeholder = { Text("e.g. work, urgent") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     if (newTodoText.isNotBlank()) {
-                        TodoManager.addTodo(newTodoText, newTodoPriority)
+                        val creationDate = newTodoCreationDate.takeIf { it.isNotBlank() }
+                        val dueDate = newTodoDueDate.takeIf { it.isNotBlank() }
+                        val tags = newTodoTags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        TodoManager.addTodo(newTodoText, newTodoPriority, creationDate, dueDate, tags)
                         todos = TodoManager.loadTodos()
                         newTodoText = ""
                         newTodoPriority = null
+                        newTodoCreationDate = ""
+                        newTodoDueDate = ""
+                        newTodoTags = ""
                         showAddDialog = false
                     }
                 }) {
@@ -783,6 +990,6 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("Pomodoro", Icons.Default.Refresh),
-    TODO("Todo", Icons.Default.MoreVert),
+    TODO("Todo", Icons.Default.List),
     SETTINGS("Settings", Icons.Default.Settings)
 }

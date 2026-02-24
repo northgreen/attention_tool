@@ -66,7 +66,6 @@ class ClockService : Service() {
         super.onCreate()
         ClockStateManager.init(this)
         createNotificationChannel()
-        restoreState()
     }
 
     private fun restoreState() {
