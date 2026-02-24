@@ -8,7 +8,6 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.PowerManager
-import android.provider.Settings
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -38,11 +37,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,7 +48,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,8 +65,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import kotlinx.coroutines.delay
+import org.ictye.ictyetools.Dialogs.BackgroundDialog
+import org.ictye.ictyetools.Utils.ClockStateManager
+import org.ictye.ictyetools.Utils.TodoManager
 import org.ictye.ictyetools.ui.theme.IctyeToolsTheme
 import org.ictye.ictyetools.ui.theme.IdleColor
 import org.ictye.ictyetools.ui.theme.LongBreakColor
@@ -119,6 +118,19 @@ class MainActivity : ComponentActivity() {
                 val serviceIntent = Intent(this, ClockService::class.java).apply {
                     action = if (restore) "RESTORE" else null
                 }
+                startService(serviceIntent)
+                bindService(serviceIntent, clockServiceConnection, BIND_AUTO_CREATE)
+                isBound = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun bindServiceWithoutRestore() {
+        if (!isBound) {
+            try {
+                val serviceIntent = Intent(this, ClockService::class.java)
                 startService(serviceIntent)
                 bindService(serviceIntent, clockServiceConnection, BIND_AUTO_CREATE)
                 isBound = true
@@ -215,39 +227,7 @@ fun PomodoroApp(
     val context = LocalContext.current
 
     if (showBackgroundDialog) {
-        AlertDialog(
-            onDismissRequest = onBackgroundDialogDismiss,
-            title = { Text("Background Restriction Detected") },
-            text = { Text("To keep the timer running in the background, please disable battery optimization for this app.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    val packageName = context.packageName
-                    try {
-                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = "package:$packageName".toUri()
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        try {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = "package:$packageName".toUri()
-                            }
-                            context.startActivity(intent)
-                        } catch (e2: Exception) {
-                            e2.printStackTrace()
-                        }
-                    }
-                    onBackgroundDialogDismiss()
-                }) {
-                    Text("Go to Settings")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onBackgroundDialogDismiss) {
-                    Text("Cancel")
-                }
-            }
-        )
+        BackgroundDialog(context = context, onBackgroundDialogDismiss = onBackgroundDialogDismiss)
     }
 
     NavigationSuiteScaffold(
@@ -471,7 +451,7 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
 
             FilledIconButton(
                 onClick = {
-                    mainActivity.startClockService()
+                    mainActivity.bindServiceWithoutRestore()
                     mainActivity.clockServiceBinder?.service?.resetTimer()
                 },
                 modifier = Modifier.size(56.dp),
@@ -498,6 +478,6 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("Pomodoro", Icons.Default.Refresh),
-    TODO("Todo", Icons.Default.Settings),
+    TODO("Todo", Icons.AutoMirrored.Filled.List),
     SETTINGS("Settings", Icons.Default.Settings)
 }

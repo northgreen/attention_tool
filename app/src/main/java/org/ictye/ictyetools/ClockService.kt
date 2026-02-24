@@ -17,6 +17,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat.Builder
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import org.ictye.ictyetools.Utils.ClockStateManager
 
 enum class PomodoroState {
     IDLE,
@@ -187,7 +188,12 @@ class ClockService : Service() {
         }
         
         _pomodoroState.postValue(PomodoroState.PAUSED)
-        saveState()
+        ClockStateManager.saveState(
+            currentTime = _currentTime.value ?: workDuration,
+            state = PomodoroState.PAUSED,
+            completedPomodoros = _completedPomodoros.value ?: 0,
+            isRunning = false
+        )
         updateNotification("Paused - ${formatTime(_currentTime.value ?: 0)}")
     }
 
@@ -198,7 +204,12 @@ class ClockService : Service() {
         }
         _currentTime.postValue(workDuration)
         _pomodoroState.postValue(PomodoroState.IDLE)
-        saveState()
+        ClockStateManager.saveState(
+            currentTime = workDuration,
+            state = PomodoroState.IDLE,
+            completedPomodoros = _completedPomodoros.value ?: 0,
+            isRunning = false
+        )
         updateNotification("Timer stopped")
     }
 
@@ -210,7 +221,12 @@ class ClockService : Service() {
         _completedPomodoros.postValue(0)
         _pomodoroState.postValue(PomodoroState.IDLE)
         _currentTime.postValue(workDuration)
-        ClockStateManager.clearState()
+        ClockStateManager.saveState(
+            currentTime = workDuration,
+            state = PomodoroState.IDLE,
+            completedPomodoros = 0,
+            isRunning = false
+        )
         updateNotification("Ready to start")
     }
 
