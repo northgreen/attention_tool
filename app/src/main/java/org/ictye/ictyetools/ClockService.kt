@@ -22,7 +22,8 @@ enum class PomodoroState {
     IDLE,
     WORK,
     SHORT_BREAK,
-    LONG_BREAK
+    LONG_BREAK,
+    PAUSED
 }
 
 class ClockService : Service() {
@@ -38,12 +39,14 @@ class ClockService : Service() {
     var timer: CountDownTimer? = null
 
     val binder: ClockBinder = ClockBinder()
-    private val _currentTime = MutableLiveData<Long>()
+    private val _currentTime = MutableLiveData<Long>(WORK_DURATION)
     val currentTime: LiveData<Long> get() = _currentTime
 
     private val _pomodoroState = MutableLiveData(PomodoroState.IDLE)
     val pomodoroState: LiveData<PomodoroState> get() = _pomodoroState
 
+    private var _previousState: PomodoroState? = null
+    
     private val _completedPomodoros = MutableLiveData(0)
     val completedPomodoros: LiveData<Int> get() = _completedPomodoros
 
@@ -61,7 +64,47 @@ class ClockService : Service() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate() {
         super.onCreate()
+        ClockStateManager.init(this)
         createNotificationChannel()
+        restoreState()
+    }
+
+    private fun restoreState() {
+        val state = ClockStateManager.getState()
+        val currentTime = ClockStateManager.getCurrentTime()
+        val completed = ClockStateManager.getCompletedPomodoros()
+
+        _pomodoroState.postValue(state)
+        _currentTime.postValue(currentTime)
+        _completedPomodoros.postValue(completed)
+
+        // 只有在计时器真正运行中（不是暂停状态）时才自动恢复
+        val isActuallyRunning = ClockStateManager.isRunning() && 
+            state != PomodoroState.PAUSED && 
+            currentTime > 0
+        
+        if (isActuallyRunning) {
+            val previousState = when (state) {
+                PomodoroState.WORK -> PomodoroState.WORK
+                PomodoroState.SHORT_BREAK -> PomodoroState.SHORT_BREAK
+                PomodoroState.LONG_BREAK -> PomodoroState.LONG_BREAK
+                else -> PomodoroState.WORK
+            }
+            _previousState = previousState
+            resumeTimer()
+        }
+    }
+
+    private fun saveState() {
+        val isRunning = _pomodoroState.value == PomodoroState.WORK ||
+                _pomodoroState.value == PomodoroState.SHORT_BREAK ||
+                _pomodoroState.value == PomodoroState.LONG_BREAK
+        ClockStateManager.saveState(
+            currentTime = _currentTime.value ?: workDuration,
+            state = _pomodoroState.value ?: PomodoroState.IDLE,
+            completedPomodoros = _completedPomodoros.value ?: 0,
+            isRunning = isRunning
+        )
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -98,39 +141,58 @@ class ClockService : Service() {
 
     fun startTimer() {
         val state = _pomodoroState.value
-        if (state == PomodoroState.IDLE || state == null || state == PomodoroState.WORK) {
+        if (state == PomodoroState.PAUSED) {
+            resumeTimer()
+        } else if (state == PomodoroState.IDLE || state == null) {
             startWork()
-        } else {
+        } else if (state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK) {
             resumeTimer()
         }
     }
 
-    fun pauseTimer() {
-        timer?.cancel()
-        timer = null
-        updateNotification("Paused - ${formatTime(_currentTime.value ?: 0)}")
+    private fun resumeTimer() {
+        val remainingTime = _currentTime.value
+        if (remainingTime == null || remainingTime <= 0) {
+            startWork()
+            return
+        }
+        
+        val currentState = _pomodoroState.value
+        val previousState = _previousState ?: PomodoroState.WORK
+        
+        if (currentState == PomodoroState.PAUSED) {
+            _pomodoroState.postValue(previousState)
+        }
+        
+        timer = object : CountDownTimer(remainingTime, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                updateTimer(millisUntilFinished)
+            }
+            override fun onFinish() {
+                onTimerFinished()
+            }
+        }
+        timer?.start()
     }
 
-    private fun resumeTimer() {
-        val remainingTime = _currentTime.value ?: return
-        if (remainingTime > 0) {
-            timer = object : CountDownTimer(remainingTime, 1000) {
-                override fun onTick(millisUntilFinished: Long) {
-                    updateTimer(millisUntilFinished)
-                }
-                override fun onFinish() {
-                    onTimerFinished()
-                }
-            }
-            timer?.start()
+    fun pauseTimer() {
+        val currentState = _pomodoroState.value
+        if (currentState != PomodoroState.IDLE && currentState != PomodoroState.PAUSED) {
+            _previousState = currentState
         }
+        timer?.cancel()
+        timer = null
+        _pomodoroState.postValue(PomodoroState.PAUSED)
+        saveState()
+        updateNotification("Paused - ${formatTime(_currentTime.value ?: 0)}")
     }
 
     fun stopTimer() {
         timer?.cancel()
         timer = null
-        _currentTime.postValue(0L)
+        _currentTime.postValue(workDuration)
         _pomodoroState.postValue(PomodoroState.IDLE)
+        saveState()
         updateNotification("Timer stopped")
     }
 
@@ -140,6 +202,7 @@ class ClockService : Service() {
         _completedPomodoros.postValue(0)
         _pomodoroState.postValue(PomodoroState.IDLE)
         _currentTime.postValue(workDuration)
+        ClockStateManager.clearState()
         updateNotification("Ready to start")
     }
 
@@ -190,6 +253,7 @@ class ClockService : Service() {
 
     private fun updateTimer(millisUntilFinished: Long) {
         _currentTime.postValue(millisUntilFinished)
+        saveState()
         val state = _pomodoroState.value
         val stateText = when(state) {
             PomodoroState.WORK -> "Work"
@@ -250,12 +314,22 @@ class ClockService : Service() {
     }
 
     private fun buildNotification(text: String): Notification {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
         val notification = Builder( this, CHANNEL_ID )
             .setContentTitle("Pomodoro Timer")
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_clock)
             .setOngoing(true)
             .setSilent(true)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
         return notification.build()
     }
 

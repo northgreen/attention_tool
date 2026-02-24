@@ -1,5 +1,6 @@
 package org.ictye.ictyetools
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -24,7 +25,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -44,6 +44,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,13 +65,22 @@ import org.ictye.ictyetools.ui.theme.LongBreakColor
 import org.ictye.ictyetools.ui.theme.ShortBreakColor
 import org.ictye.ictyetools.ui.theme.WorkColor
 
+object ClockStateHolder {
+    var currentTime: Long = ClockService.WORK_DURATION
+    var state: PomodoroState = PomodoroState.IDLE
+    var completed: Int = 0
+}
+
 class MainActivity : ComponentActivity() {
+    var clockServiceBinder: ClockService.ClockBinder? = null
+    private var isBound = false
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Intent(this, ClockService::class.java).also {
-            intent -> bindService(intent, clockServiceConnection, Context.BIND_AUTO_CREATE)
-        }
+        
+        ClockStateManager.init(this)
+        bindServiceIfNeeded()
 
         enableEdgeToEdge()
         setContent {
@@ -79,8 +89,19 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    var clockServiceBinder: ClockService.ClockBinder? = null
+    
+    private fun bindServiceIfNeeded() {
+        if (!isBound) {
+            try {
+                Intent(this, ClockService::class.java).also {
+                    intent -> bindService(intent, clockServiceConnection, Context.BIND_AUTO_CREATE)
+                }
+                isBound = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     private val clockServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -89,6 +110,7 @@ class MainActivity : ComponentActivity() {
 
         override fun onServiceDisconnected(name: ComponentName?) {
             clockServiceBinder = null
+            isBound = false
         }
     }
 
@@ -97,13 +119,22 @@ class MainActivity : ComponentActivity() {
         if (clockServiceBinder == null) {
             val serviceIntent = Intent(this, ClockService::class.java)
             startForegroundService(serviceIntent)
+            // 延迟尝试绑定
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                bindServiceIfNeeded()
+            }, 500)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        if (clockServiceBinder != null) {
-            unbindService(clockServiceConnection)
+        if (isBound) {
+            try {
+                unbindService(clockServiceConnection)
+            } catch (e: Exception) {
+                // 可能已经解绑了
+            }
+            isBound = false
         }
     }
 }
@@ -157,22 +188,36 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
     val context = LocalContext.current
     val mainActivity = context as MainActivity
     
-    val clockService = mainActivity.clockServiceBinder?.service
+    var tick by remember { mutableIntStateOf(0) }
     
-    val time by produceState(initialValue = ClockService.WORK_DURATION, key1 = clockService?.currentTime) {
-        clockService?.currentTime?.observeForever { value = it ?: 0L }
+    val time = remember(tick) { 
+        mainActivity.clockServiceBinder?.service?.currentTime?.value 
+            ?: ClockStateManager.getCurrentTime()
+            ?: ClockService.WORK_DURATION
+    }
+    val state = remember(tick) { 
+        mainActivity.clockServiceBinder?.service?.pomodoroState?.value 
+            ?: ClockStateManager.getState()
+            ?: PomodoroState.IDLE
+    }
+    val completedPomodoros = remember(tick) { 
+        mainActivity.clockServiceBinder?.service?.completedPomodoros?.value 
+            ?: ClockStateManager.getCompletedPomodoros()
+            ?: 0
     }
     
-    val state by produceState(initialValue = PomodoroState.IDLE, key1 = clockService?.pomodoroState) {
-        clockService?.pomodoroState?.observeForever { value = it ?: PomodoroState.IDLE }
-    }
+    val isRunning = state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK
     
-    val completedPomodoros by produceState(initialValue = 0, key1 = clockService?.completedPomodoros) {
-        clockService?.completedPomodoros?.observeForever { value = it ?: 0 }
+    // 定时刷新 tick
+    LaunchedEffect(Unit) {
+        while (true) {
+            tick++
+            delay(100)
+        }
     }
     
     val totalTime = when (state) {
-        PomodoroState.WORK -> ClockService.WORK_DURATION
+        PomodoroState.WORK, PomodoroState.PAUSED -> ClockService.WORK_DURATION
         PomodoroState.SHORT_BREAK -> ClockService.SHORT_BREAK_DURATION
         PomodoroState.LONG_BREAK -> ClockService.LONG_BREAK_DURATION
         PomodoroState.IDLE -> ClockService.WORK_DURATION
@@ -183,12 +228,14 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
         PomodoroState.WORK -> WorkColor
         PomodoroState.SHORT_BREAK -> ShortBreakColor
         PomodoroState.LONG_BREAK -> LongBreakColor
+        PomodoroState.PAUSED -> WorkColor
         PomodoroState.IDLE -> IdleColor
     }
     val stateText = when (state) {
         PomodoroState.WORK -> "Work Time"
         PomodoroState.SHORT_BREAK -> "Short Break"
         PomodoroState.LONG_BREAK -> "Long Break"
+        PomodoroState.PAUSED -> "Paused"
         PomodoroState.IDLE -> "Ready"
     }
 
@@ -257,24 +304,30 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
                     containerColor = MaterialTheme.colorScheme.errorContainer
                 )
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Stop")
+                Icon(Icons.Default.Refresh, contentDescription = "Stop")
             }
 
             FilledIconButton(
                 onClick = {
                     mainActivity.startClockService()
-                    mainActivity.clockServiceBinder?.service?.startTimer()
+                    val service = mainActivity.clockServiceBinder?.service
+                    if (state == PomodoroState.PAUSED) {
+                        service?.startTimer()
+                    } else if (isRunning) {
+                        service?.pauseTimer()
+                    } else {
+                        service?.startTimer()
+                    }
                 },
                 modifier = Modifier.size(80.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = stateColor
+                    containerColor = if (isRunning) WorkColor else ShortBreakColor
                 )
             ) {
-                Icon(
-                    if (state == PomodoroState.IDLE || state == PomodoroState.WORK) Icons.Default.PlayArrow
-                    else Icons.Default.PlayArrow,
-                    contentDescription = "Start/Pause",
-                    modifier = Modifier.size(40.dp)
+                Text(
+                    text = if (state == PomodoroState.PAUSED) "▶" else if (isRunning) "||" else "▶",
+                    fontSize = 24.sp,
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
             }
 
@@ -349,6 +402,7 @@ fun SettingsDialog(onDismiss: () -> Unit) {
     )
 }
 
+@SuppressLint("DefaultLocale")
 private fun formatTime(millis: Long): String {
     val totalSeconds = millis / 1000
     val minutes = totalSeconds / 60
@@ -360,6 +414,6 @@ enum class AppDestinations(
     val label: String,
     val icon: ImageVector,
 ) {
-    HOME("Pomodoro", Icons.Default.PlayArrow),
+    HOME("Pomodoro", Icons.Default.Refresh),
     SETTINGS("Settings", Icons.Default.Settings)
 }
