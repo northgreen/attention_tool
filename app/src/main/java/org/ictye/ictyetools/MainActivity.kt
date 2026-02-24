@@ -3,7 +3,6 @@ package org.ictye.ictyetools
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
@@ -19,8 +18,15 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,55 +37,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.TextField
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,23 +62,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import kotlinx.coroutines.delay
 import org.ictye.ictyetools.ui.theme.IctyeToolsTheme
 import org.ictye.ictyetools.ui.theme.IdleColor
 import org.ictye.ictyetools.ui.theme.LongBreakColor
 import org.ictye.ictyetools.ui.theme.ShortBreakColor
 import org.ictye.ictyetools.ui.theme.WorkColor
-import androidx.core.net.toUri
-import java.io.File
 
 
 class MainActivity : ComponentActivity() {
@@ -227,7 +195,6 @@ class MainActivity : ComponentActivity() {
             try {
                 unbindService(clockServiceConnection)
             } catch (e: Exception) {
-                // 可能已经解绑了
                 println("onDestroy: 尝试解绑服务时发生异常")
                 e.printStackTrace()
             }
@@ -361,7 +328,6 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
     
     val isRunning = state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK
     
-    // 定时刷新 tick
     LaunchedEffect(Unit) {
         while (true) {
             tick++
@@ -519,621 +485,6 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
     }
 }
 
-@Composable
-fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
-    val context = LocalContext.current
-    val mainActivity = context as? MainActivity
-    
-    var showPomodoroSettings by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
-    var workMinutes by rememberSaveable { mutableStateOf("25") }
-    var shortBreakMinutes by rememberSaveable { mutableStateOf("5") }
-    var longBreakMinutes by rememberSaveable { mutableStateOf("15") }
-    
-    if (showPomodoroSettings) {
-        AlertDialog(
-            onDismissRequest = { showPomodoroSettings = false },
-            title = { Text("Pomodoro Settings") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = workMinutes,
-                        onValueChange = { workMinutes = it },
-                        label = { Text("Work Duration (minutes)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = shortBreakMinutes,
-                        onValueChange = { shortBreakMinutes = it },
-                        label = { Text("Short Break (minutes)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = longBreakMinutes,
-                        onValueChange = { longBreakMinutes = it },
-                        label = { Text("Long Break (minutes)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    mainActivity?.clockServiceBinder?.service?.setDurations(
-                        (workMinutes.toLongOrNull() ?: 25) * 60 * 1000L,
-                        (shortBreakMinutes.toLongOrNull() ?: 5) * 60 * 1000L,
-                        (longBreakMinutes.toLongOrNull() ?: 15) * 60 * 1000L
-                    )
-                    mainActivity?.clockServiceBinder?.service?.resetTimer()
-                    showPomodoroSettings = false
-                }) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPomodoroSettings = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-    
-    if (showAbout) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("About") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("IctyeTools", fontWeight = FontWeight.Bold)
-                    Text("Version 1.0.0")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("A Pomodoro Timer with Todo list functionality.")
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showAbout = false }) {
-                    Text("OK")
-                }
-            }
-        )
-    }
-    
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        ListItem(
-            headlineContent = { Text("Pomodoro Timer") },
-            supportingContent = { Text("Configure work/break durations") },
-            leadingContent = {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-            },
-            modifier = Modifier.clickable { showPomodoroSettings = true }
-        )
-        
-        HorizontalDivider()
-        
-        ListItem(
-            headlineContent = { Text("Export Todo") },
-            supportingContent = { Text("Share todo.txt file") },
-            leadingContent = {
-                Icon(Icons.Default.Share, contentDescription = null)
-            },
-            modifier = Modifier.clickable {
-                val file = File(TodoManager.getTodoFilePath())
-                if (file.exists()) {
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(intent, "Export Todo"))
-                }
-            }
-        )
-        
-        HorizontalDivider()
-        
-        ListItem(
-            headlineContent = { Text("About") },
-            supportingContent = { Text("App information") },
-            leadingContent = {
-                Icon(Icons.Default.Info, contentDescription = null)
-            },
-            modifier = Modifier.clickable { showAbout = true }
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TodoScreen(modifier: Modifier = Modifier) {
-    var todos by remember { mutableStateOf(TodoManager.loadTodos()) }
-    var newTodoText by remember { mutableStateOf("") }
-    var newTodoPriority by remember { mutableStateOf<Char?>(null) }
-    var newTodoCreationDate by remember { mutableStateOf("") }
-    var newTodoDueDate by remember { mutableStateOf("") }
-    var newTodoTags by remember { mutableStateOf("") }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var editingTodoIndex by remember { mutableStateOf<Int?>(null) }
-    var editingTodoText by remember { mutableStateOf("") }
-    var editingTodoPriority by remember { mutableStateOf<Char?>(null) }
-    var editingTodoCreationDate by remember { mutableStateOf("") }
-    var editingTodoDueDate by remember { mutableStateOf("") }
-    var editingTodoTags by remember { mutableStateOf("") }
-    var sortBy by remember { mutableStateOf("priority") }
-    var ascending by remember { mutableStateOf(true) }
-    
-    val sortedTodos = remember(todos, sortBy, ascending) {
-        when (sortBy) {
-            "priority" -> {
-                val uncompleted = todos.filter { !it.isCompleted }.sortedWith(
-                    compareBy { if (it.priority == null) 0 else ('Z' - it.priority + 1) }
-                )
-                val completed = todos.filter { it.isCompleted }
-                if (ascending) uncompleted + completed else uncompleted.reversed() + completed
-            }
-            "alpha" -> {
-                val uncompleted = todos.filter { !it.isCompleted }.sortedBy { it.text.lowercase() }
-                val completed = todos.filter { it.isCompleted }
-                if (ascending) uncompleted + completed else uncompleted.reversed() + completed
-            }
-            else -> {
-                val uncompleted = todos.filter { !it.isCompleted }
-                val completed = todos.filter { it.isCompleted }
-                uncompleted + completed
-            }
-        }
-    }
-    
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Todo List",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(
-                    selected = sortBy == "priority",
-                    onClick = { sortBy = "priority" },
-                    label = { Text("Priority") }
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                FilterChip(
-                    selected = sortBy == "alpha",
-                    onClick = { sortBy = "alpha" },
-                    label = { Text("A-Z") }
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                IconButton(onClick = { ascending = !ascending }) {
-                    Icon(
-                        imageVector = if (ascending) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (ascending) "Ascending" else "Descending"
-                    )
-                }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(sortedTodos) { _, todo ->
-                    val originalIndex = todos.indexOf(todo)
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart && originalIndex >= 0) {
-                                TodoManager.deleteTodo(originalIndex)
-                                todos = TodoManager.loadTodos()
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                    )
-                    
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.errorContainer)
-                                    .padding(horizontal = 20.dp),
-                                contentAlignment = Alignment.CenterEnd
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                        },
-                        content = {
-                            ListItem(
-                                modifier = Modifier.clickable {
-                                    if (originalIndex >= 0) {
-                                        val item = todos[originalIndex]
-                                        editingTodoIndex = originalIndex
-                                        editingTodoText = item.text
-                                        editingTodoPriority = item.priority
-                                        editingTodoCreationDate = item.creationDate ?: ""
-                                        editingTodoDueDate = item.dueDate ?: ""
-                                        editingTodoTags = item.tags.joinToString(", ")
-                                    }
-                                },
-                                headlineContent = {
-                                    Text(
-                                        text = todo.text,
-                                        color = if (todo.isCompleted) 
-                                            MaterialTheme.colorScheme.onSurfaceVariant 
-                                        else MaterialTheme.colorScheme.onSurface,
-                                        style = if (todo.isCompleted)
-                                            MaterialTheme.typography.bodyLarge.copy(
-                                                textDecoration = TextDecoration.LineThrough
-                                            )
-                                    else MaterialTheme.typography.bodyLarge
-                                    )
-                                },
-                                supportingContent = {
-                                    Column {
-                                        if (todo.priority != null || todo.projects.isNotEmpty() || todo.creationDate != null || todo.dueDate != null || todo.tags.isNotEmpty()) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                todo.priority?.let {
-                                                    Text(
-                                                        text = "($it)",
-                                                        color = MaterialTheme.colorScheme.primary,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                }
-                                                todo.projects.forEach { project ->
-                                                    Text(
-                                                        text = "+$project",
-                                                        color = MaterialTheme.colorScheme.secondary
-                                                    )
-                                                }
-                                                todo.creationDate?.let {
-                                                    Text(
-                                                        text = it,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                todo.dueDate?.let {
-                                                    Text(
-                                                        text = "Due: $it",
-                                                        color = MaterialTheme.colorScheme.error
-                                                    )
-                                                }
-                                                todo.tags.forEach { tag ->
-                                                    Text(
-                                                        text = "#$tag",
-                                                        color = MaterialTheme.colorScheme.tertiary
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                leadingContent = {
-                                    Checkbox(
-                                        checked = todo.isCompleted,
-                                        onCheckedChange = {
-                                            if (originalIndex >= 0) {
-                                                TodoManager.toggleComplete(originalIndex)
-                                                todos = TodoManager.loadTodos()
-                                            }
-                                        }
-                                    )
-                                },
-                                trailingContent = {
-                                    IconButton(onClick = {
-                                        if (originalIndex >= 0) {
-                                            TodoManager.deleteTodo(originalIndex)
-                                            todos = TodoManager.loadTodos()
-                                        }
-                                    }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Delete",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    )
-                }
-            }
-            
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(16.dp)
-            ) {
-                Icon(
-                    Icons.Default.Add, 
-                    contentDescription = "Add todo"
-                )
-            }
-        }
-    }
-    
-    if (showAddDialog) {
-        var expanded by remember { mutableStateOf(false) }
-        
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Add Todo") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = newTodoText,
-                        onValueChange = { newTodoText = it },
-                        label = { Text("Task") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = newTodoPriority?.toString() ?: "None",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Priority") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("None") },
-                                onClick = {
-                                    newTodoPriority = null
-                                    expanded = false
-                                }
-                            )
-                            listOf("A", "B", "C", "D", "E").forEach { priority ->
-                                DropdownMenuItem(
-                                    text = { Text(priority) },
-                                    onClick = {
-                                        newTodoPriority = priority.first()
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    OutlinedTextField(
-                        value = newTodoCreationDate,
-                        onValueChange = { newTodoCreationDate = it },
-                        label = { Text("Creation Date (YYYY-MM-DD)") },
-                        placeholder = { Text("Leave empty for today") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newTodoDueDate,
-                        onValueChange = { newTodoDueDate = it },
-                        label = { Text("Due Date (YYYY-MM-DD)") },
-                        placeholder = { Text("Optional") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newTodoTags,
-                        onValueChange = { newTodoTags = it },
-                        label = { Text("Tags (comma separated)") },
-                        placeholder = { Text("e.g. work, urgent") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (newTodoText.isNotBlank()) {
-                        val creationDate = newTodoCreationDate.takeIf { it.isNotBlank() }
-                        val dueDate = newTodoDueDate.takeIf { it.isNotBlank() }
-                        val tags = newTodoTags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                        TodoManager.addTodo(newTodoText, newTodoPriority, creationDate, dueDate, tags)
-                        todos = TodoManager.loadTodos()
-                        newTodoText = ""
-                        newTodoPriority = null
-                        newTodoCreationDate = ""
-                        newTodoDueDate = ""
-                        newTodoTags = ""
-                        showAddDialog = false
-                    }
-                }) {
-                    Text("Add")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-    
-    if (editingTodoIndex != null) {
-        var expanded by remember { mutableStateOf(false) }
-        
-        AlertDialog(
-            onDismissRequest = { editingTodoIndex = null },
-            title = { Text("Edit Todo") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = editingTodoText,
-                        onValueChange = { editingTodoText = it },
-                        label = { Text("Task") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = editingTodoPriority?.toString() ?: "None",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Priority") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("None") },
-                                onClick = {
-                                    editingTodoPriority = null
-                                    expanded = false
-                                }
-                            )
-                            listOf("A", "B", "C", "D", "E").forEach { priority ->
-                                DropdownMenuItem(
-                                    text = { Text(priority) },
-                                    onClick = {
-                                        editingTodoPriority = priority.first()
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    OutlinedTextField(
-                        value = editingTodoCreationDate,
-                        onValueChange = { editingTodoCreationDate = it },
-                        label = { Text("Creation Date (YYYY-MM-DD)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = editingTodoDueDate,
-                        onValueChange = { editingTodoDueDate = it },
-                        label = { Text("Due Date (YYYY-MM-DD)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = editingTodoTags,
-                        onValueChange = { editingTodoTags = it },
-                        label = { Text("Tags (comma separated)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (editingTodoText.isNotBlank() && editingTodoIndex != null) {
-                        val creationDate = editingTodoCreationDate.takeIf { it.isNotBlank() }
-                        val dueDate = editingTodoDueDate.takeIf { it.isNotBlank() }
-                        val tags = editingTodoTags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                        TodoManager.updateTodo(editingTodoIndex!!, editingTodoText, editingTodoPriority, creationDate, dueDate, tags)
-                        todos = TodoManager.loadTodos()
-                        editingTodoIndex = null
-                    }
-                }) {
-                    Text("Save")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingTodoIndex = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-}
-
-@RequiresApi(Build.VERSION_CODES.O)
-@Composable
-fun SettingsDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val mainActivity = context as? MainActivity
-    var workMinutes by rememberSaveable { mutableStateOf("25") }
-    var shortBreakMinutes by rememberSaveable { mutableStateOf("5") }
-    var longBreakMinutes by rememberSaveable { mutableStateOf("15") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Settings") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = workMinutes,
-                    onValueChange = { workMinutes = it },
-                    label = { Text("Work Duration (minutes)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = shortBreakMinutes,
-                    onValueChange = { shortBreakMinutes = it },
-                    label = { Text("Short Break (minutes)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = longBreakMinutes,
-                    onValueChange = { longBreakMinutes = it },
-                    label = { Text("Long Break (minutes)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                mainActivity?.clockServiceBinder?.service?.setDurations(
-                    (workMinutes.toLongOrNull() ?: 25) * 60 * 1000L,
-                    (shortBreakMinutes.toLongOrNull() ?: 5) * 60 * 1000L,
-                    (longBreakMinutes.toLongOrNull() ?: 15) * 60 * 1000L
-                )
-                mainActivity?.clockServiceBinder?.service?.resetTimer()
-                onDismiss()
-            }) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
 @SuppressLint("DefaultLocale")
 private fun formatTime(millis: Long): String {
     val totalSeconds = millis / 1000
@@ -1147,6 +498,6 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("Pomodoro", Icons.Default.Refresh),
-    TODO("Todo", Icons.AutoMirrored.Filled.List),
+    TODO("Todo", Icons.Default.Settings),
     SETTINGS("Settings", Icons.Default.Settings)
 }

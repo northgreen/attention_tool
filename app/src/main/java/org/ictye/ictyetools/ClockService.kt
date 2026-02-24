@@ -152,6 +152,11 @@ class ClockService : Service() {
             return
         }
         
+        if (timer != null) {
+            timer?.cancel()
+            timer = null
+        }
+        
         val currentState = _pomodoroState.value
         val previousState = _previousState ?: PomodoroState.WORK
         
