@@ -72,8 +72,14 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -304,16 +310,25 @@ fun PomodoroApp(
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            when (currentDestination) {
-                AppDestinations.HOME -> PomodoroTimerScreen(
-                    modifier = Modifier.padding(innerPadding),
-                    onSettingsClick = { currentDestination = AppDestinations.SETTINGS }
-                )
-                AppDestinations.TODO -> TodoScreen(modifier = Modifier.padding(innerPadding))
-                AppDestinations.SETTINGS -> SettingsScreen(
-                    modifier = Modifier.padding(innerPadding),
-                    onNavigateBack = { currentDestination = AppDestinations.HOME }
-                )
+            AnimatedContent(
+                targetState = currentDestination,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.92f, animationSpec = tween(300)))
+                        .togetherWith(fadeOut(animationSpec = tween(300)) + scaleOut(targetScale = 0.92f, animationSpec = tween(300)))
+                },
+                label = "pageTransition"
+            ) { destination ->
+                when (destination) {
+                    AppDestinations.HOME -> PomodoroTimerScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        onSettingsClick = { currentDestination = AppDestinations.SETTINGS }
+                    )
+                    AppDestinations.TODO -> TodoScreen(modifier = Modifier.padding(innerPadding))
+                    AppDestinations.SETTINGS -> SettingsScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        onNavigateBack = { currentDestination = AppDestinations.HOME }
+                    )
+                }
             }
         }
     }
@@ -383,7 +398,9 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
     }
 
     Column(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .background(stateColor.copy(alpha = 0.1f)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
