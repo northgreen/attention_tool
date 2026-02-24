@@ -72,6 +72,8 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -82,6 +84,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -359,13 +362,18 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
     }
 
     val progress = if (totalTime > 0) (totalTime - time).toFloat() / totalTime else 0f
-    val stateColor = when (state) {
+    val stateColorRaw = when (state) {
         PomodoroState.WORK -> WorkColor
         PomodoroState.SHORT_BREAK -> ShortBreakColor
         PomodoroState.LONG_BREAK -> LongBreakColor
         PomodoroState.PAUSED -> WorkColor
         PomodoroState.IDLE -> IdleColor
     }
+    val stateColor by animateColorAsState(
+        targetValue = stateColorRaw,
+        animationSpec = tween(durationMillis = 500),
+        label = "stateColor"
+    )
     val stateText = when (state) {
         PomodoroState.WORK -> "Work Time"
         PomodoroState.SHORT_BREAK -> "Short Break"
@@ -429,6 +437,12 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val buttonColor by animateColorAsState(
+                targetValue = if (isRunning) WorkColor else ShortBreakColor,
+                animationSpec = tween(durationMillis = 500),
+                label = "buttonColor"
+            )
+            
             FilledIconButton(
                 onClick = {
                     mainActivity.startClockService()
@@ -461,7 +475,7 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
                 },
                 modifier = Modifier.size(80.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = if (isRunning) WorkColor else ShortBreakColor
+                    containerColor = buttonColor
                 )
             ) {
                 Icon(
