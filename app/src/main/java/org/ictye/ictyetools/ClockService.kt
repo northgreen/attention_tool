@@ -73,25 +73,16 @@ class ClockService : Service() {
         val state = ClockStateManager.getState()
         val currentTime = ClockStateManager.getCurrentTime()
         val completed = ClockStateManager.getCompletedPomodoros()
+        val wasRunning = ClockStateManager.isRunning()
 
         _pomodoroState.postValue(state)
         _currentTime.postValue(currentTime)
         _completedPomodoros.postValue(completed)
 
-        // 只有在计时器真正运行中（不是暂停状态）时才自动恢复
-        val isActuallyRunning = ClockStateManager.isRunning() && 
-            state != PomodoroState.PAUSED && 
-            currentTime > 0
-        
-        if (isActuallyRunning) {
-            val previousState = when (state) {
-                PomodoroState.WORK -> PomodoroState.WORK
-                PomodoroState.SHORT_BREAK -> PomodoroState.SHORT_BREAK
-                PomodoroState.LONG_BREAK -> PomodoroState.LONG_BREAK
-                else -> PomodoroState.WORK
-            }
-            _previousState = previousState
-            resumeTimer()
+        if (wasRunning && currentTime > 0 && state != PomodoroState.PAUSED && state != PomodoroState.IDLE) {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                startTimer()
+            }, 1000)
         }
     }
 
@@ -116,7 +107,12 @@ class ClockService : Service() {
             .setSmallIcon(R.drawable.ic_clock)
 
         startForeground(NOTIFICATION_ID, notification.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        return START_NOT_STICKY
+        
+        if (intent?.action == "RESTORE") {
+            restoreState()
+        }
+        
+        return START_STICKY
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -180,16 +176,22 @@ class ClockService : Service() {
         if (currentState != PomodoroState.IDLE && currentState != PomodoroState.PAUSED) {
             _previousState = currentState
         }
-        timer?.cancel()
-        timer = null
+        
+        if (timer != null) {
+            timer?.cancel()
+            timer = null
+        }
+        
         _pomodoroState.postValue(PomodoroState.PAUSED)
         saveState()
         updateNotification("Paused - ${formatTime(_currentTime.value ?: 0)}")
     }
 
     fun stopTimer() {
-        timer?.cancel()
-        timer = null
+        if (timer != null) {
+            timer?.cancel()
+            timer = null
+        }
         _currentTime.postValue(workDuration)
         _pomodoroState.postValue(PomodoroState.IDLE)
         saveState()
@@ -197,8 +199,10 @@ class ClockService : Service() {
     }
 
     fun resetTimer() {
-        timer?.cancel()
-        timer = null
+        if (timer != null) {
+            timer?.cancel()
+            timer = null
+        }
         _completedPomodoros.postValue(0)
         _pomodoroState.postValue(PomodoroState.IDLE)
         _currentTime.postValue(workDuration)
@@ -316,6 +320,7 @@ class ClockService : Service() {
     private fun buildNotification(text: String): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            action = "FROM_NOTIFICATION"
         }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
