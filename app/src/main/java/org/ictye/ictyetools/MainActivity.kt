@@ -239,6 +239,25 @@ fun PomodoroApp(
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
     var showSettings by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val mainActivity = context as? MainActivity
+
+    val tick = usePomodoroTimerTick()
+
+    val timerState = rememberPomodoroTimerState(
+        tick = tick,
+        getTime = {
+            mainActivity?.clockServiceBinder?.service?.currentTime?.value
+                ?: ClockStateManager.getCurrentTime()
+        },
+        getState = {
+            mainActivity?.clockServiceBinder?.service?.pomodoroState?.value
+                ?: ClockStateManager.getState()
+        },
+        getCompletedPomodoros = {
+            mainActivity?.clockServiceBinder?.service?.completedPomodoros?.value
+                ?: ClockStateManager.getCompletedPomodoros()
+        }
+    )
 
     if (showBackgroundDialog) {
         BackgroundDialog(context = context, onBackgroundDialogDismiss = onBackgroundDialogDismiss)
@@ -291,7 +310,24 @@ fun PomodoroApp(
                 when (destination) {
                     AppDestinations.HOME -> PomodoroTimerScreen(
                         modifier = Modifier.padding(innerPadding),
-                        onSettingsClick = { currentDestination = AppDestinations.SETTINGS }
+                        onSettingsClick = { currentDestination = AppDestinations.SETTINGS },
+                        timerState = timerState,
+                        onStartTimer = {
+                            mainActivity?.startClockService()
+                            mainActivity?.clockServiceBinder?.service?.startTimer()
+                        },
+                        onPauseTimer = {
+                            mainActivity?.startClockService()
+                            mainActivity?.clockServiceBinder?.service?.pauseTimer()
+                        },
+                        onStopTimer = {
+                            mainActivity?.startClockService()
+                            mainActivity?.clockServiceBinder?.service?.stopTimer()
+                        },
+                        onResetTimer = {
+                            mainActivity?.bindServiceWithoutRestore()
+                            mainActivity?.clockServiceBinder?.service?.resetTimer()
+                        }
                     )
 
                     AppDestinations.TODO -> TodoScreen(modifier = Modifier.padding(innerPadding))
@@ -311,67 +347,19 @@ fun PomodoroApp(
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Unit) {
-    val context = LocalContext.current
-    val mainActivity = context as MainActivity
-
-    var tick by remember { mutableIntStateOf(0) }
-
-    val time = remember(tick) {
-        mainActivity.clockServiceBinder?.service?.currentTime?.value
-            ?: ClockStateManager.getCurrentTime()
-    }
-    val state = remember(tick) {
-        mainActivity.clockServiceBinder?.service?.pomodoroState?.value
-            ?: ClockStateManager.getState()
-    }
-    val completedPomodoros = remember(tick) {
-        mainActivity.clockServiceBinder?.service?.completedPomodoros?.value
-            ?: ClockStateManager.getCompletedPomodoros()
-    }
-
-    val isRunning =
-        state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            tick++
-            delay(100)
-        }
-    }
-
-    val totalTime = when (state) {
-        PomodoroState.WORK, PomodoroState.PAUSED -> ClockService.WORK_DURATION
-        PomodoroState.SHORT_BREAK -> ClockService.SHORT_BREAK_DURATION
-        PomodoroState.LONG_BREAK -> ClockService.LONG_BREAK_DURATION
-        PomodoroState.IDLE -> ClockService.WORK_DURATION
-    }
-
-    val progress = if (totalTime > 0) (totalTime - time).toFloat() / totalTime else 0f
-    val stateColorRaw = when (state) {
-        PomodoroState.WORK -> WorkColor
-        PomodoroState.SHORT_BREAK -> ShortBreakColor
-        PomodoroState.LONG_BREAK -> LongBreakColor
-        PomodoroState.PAUSED -> WorkColor
-        PomodoroState.IDLE -> IdleColor
-    }
-    val stateColor by animateColorAsState(
-        targetValue = stateColorRaw,
-        animationSpec = tween(durationMillis = 500),
-        label = "stateColor"
-    )
-    val stateText = when (state) {
-        PomodoroState.WORK -> "Work Time"
-        PomodoroState.SHORT_BREAK -> "Short Break"
-        PomodoroState.LONG_BREAK -> "Long Break"
-        PomodoroState.PAUSED -> "Paused"
-        PomodoroState.IDLE -> "Ready"
-    }
-
+fun PomodoroTimerScreen(
+    modifier: Modifier = Modifier,
+    onSettingsClick: () -> Unit,
+    timerState: PomodoroTimerState,
+    onStartTimer: () -> Unit = {},
+    onPauseTimer: () -> Unit = {},
+    onStopTimer: () -> Unit = {},
+    onResetTimer: () -> Unit = {}
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(stateColor.copy(alpha = 0.1f)),
+            .background(timerState.stateColor.copy(alpha = 0.1f)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -380,27 +368,30 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = stateText,
+            text = timerState.stateText,
             style = MaterialTheme.typography.headlineMedium,
-            color = stateColor,
+            color = timerState.stateColor,
             fontWeight = FontWeight.Bold
         )
 
         Spacer(modifier = Modifier.height(32.dp))
 
         TimerDisplay(
-            time = time,
-            completedPomodoros = completedPomodoros,
-            progress = progress,
-            stateColor = stateColor
+            time = timerState.time,
+            completedPomodoros = timerState.completedPomodoros,
+            progress = timerState.progress,
+            stateColor = timerState.stateColor
         )
 
         Spacer(modifier = Modifier.height(48.dp))
 
         TimerControls(
-            isRunning = isRunning,
-            state = state,
-            mainActivity = mainActivity
+            isRunning = timerState.isRunning,
+            state = timerState.state,
+            onStartTimer = onStartTimer,
+            onPauseTimer = onPauseTimer,
+            onStopTimer = onStopTimer,
+            onResetTimer = onResetTimer
         )
     }
 }
@@ -466,7 +457,10 @@ private fun TimerDisplay(
 private fun TimerControls(
     isRunning: Boolean,
     state: PomodoroState,
-    mainActivity: MainActivity
+    onStartTimer: () -> Unit = {},
+    onPauseTimer: () -> Unit = {},
+    onStopTimer: () -> Unit = {},
+    onResetTimer: () -> Unit = {}
 ) {
     val buttonColor by animateColorAsState(
         targetValue = if (isRunning) WorkColor else ShortBreakColor,
@@ -479,10 +473,7 @@ private fun TimerControls(
         verticalAlignment = Alignment.CenterVertically
     ) {
         FilledIconButton(
-            onClick = {
-                mainActivity.startClockService()
-                mainActivity.clockServiceBinder?.service?.stopTimer()
-            },
+            onClick = onStopTimer,
             modifier = Modifier.size(56.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer
@@ -498,14 +489,12 @@ private fun TimerControls(
 
         FilledIconButton(
             onClick = {
-                mainActivity.startClockService()
-                val service = mainActivity.clockServiceBinder?.service
                 if (state == PomodoroState.PAUSED) {
-                    service?.startTimer()
+                    onStartTimer()
                 } else if (isRunning) {
-                    service?.pauseTimer()
+                    onPauseTimer()
                 } else {
-                    service?.startTimer()
+                    onStartTimer()
                 }
             },
             modifier = Modifier.size(80.dp),
@@ -522,10 +511,7 @@ private fun TimerControls(
         }
 
         FilledIconButton(
-            onClick = {
-                mainActivity.bindServiceWithoutRestore()
-                mainActivity.clockServiceBinder?.service?.resetTimer()
-            },
+            onClick = onResetTimer,
             modifier = Modifier.size(56.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer
