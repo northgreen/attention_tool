@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "org.ictye.ictyetools"
+    namespace = "org.ictye.attention_tool"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -12,7 +12,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.ictye.ictyetools"
+        applicationId = "org.ictye.attention_tool"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

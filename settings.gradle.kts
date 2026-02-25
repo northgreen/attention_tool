@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "IctyeTools"
+rootProject.name = "AttentionTool"
 include(":app")
  
