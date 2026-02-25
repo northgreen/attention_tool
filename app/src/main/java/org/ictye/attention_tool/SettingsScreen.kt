@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,10 +35,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import org.ictye.attention_tool.utils.TodoManager
 import java.io.File
+
+@Preview(showBackground = true)
+@Composable
+fun SettingScreenPreview() {
+    SettingsScreen(onNavigateBack = {})
+}
+
 
 @Composable
 fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
@@ -46,6 +55,7 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
     
     var showPomodoroSettings by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showTroubleshooting by remember { mutableStateOf(false) }
     var workMinutes by rememberSaveable { mutableStateOf("25") }
     var shortBreakMinutes by rememberSaveable { mutableStateOf("5") }
     var longBreakMinutes by rememberSaveable { mutableStateOf("15") }
@@ -121,12 +131,42 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Attention Tool", fontWeight = FontWeight.Bold)
                     Text("Version 1.0.0")
+                    Text("By Ictye")
+                    Text("GPL License")
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("A Pomodoro Timer with Todo list functionality.")
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showAbout = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    if (showTroubleshooting) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Troubleshooting") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Timer not running in background?", fontWeight = FontWeight.Bold)
+                    Text("1. Make sure battery optimization is disabled for this app")
+                    Text("2. Check that the app has notification permission")
+                    Text("3. Ensure \"Show notifications\" is enabled in app settings")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Notification not showing?", fontWeight = FontWeight.Bold)
+                    Text("1. Grant notification permission when prompted")
+                    Text("2. Check system notification settings")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Todo list not saving?", fontWeight = FontWeight.Bold)
+                    Text("1. Check app storage permissions")
+                    Text("2. Try restarting the app")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTroubleshooting = false }) {
                     Text("OK")
                 }
             }
@@ -193,6 +233,17 @@ fun SettingsScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
             modifier = Modifier.clickable {
                 importLauncher.launch(arrayOf("text/plain"))
             }
+        )
+        
+        HorizontalDivider()
+        
+        ListItem(
+            headlineContent = { Text("Troubleshooting") },
+            supportingContent = { Text("Common issues and solutions") },
+            leadingContent = {
+                Icon(Icons.Default.Warning, contentDescription = null)
+            },
+            modifier = Modifier.clickable { showTroubleshooting = true }
         )
         
         HorizontalDivider()
