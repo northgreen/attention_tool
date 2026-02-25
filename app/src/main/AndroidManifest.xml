@@ -23,6 +23,17 @@
             android:foregroundServiceType="dataSync"
              />
 
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.ictye.attention_tool.ACTION_START" />
+                <action android:name="org.ictye.attention_tool.ACTION_PAUSE" />
+                <action android:name="org.ictye.attention_tool.ACTION_STOP" />
+            </intent-filter>
+        </receiver>
+
 
         <activity
             android:name=".MainActivity"

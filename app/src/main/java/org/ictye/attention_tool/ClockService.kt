@@ -14,10 +14,18 @@ import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
 import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationCompat.Builder
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import org.ictye.attention_tool.utils.ClockStateManager
+import org.ictye.attention_tool.ui.theme.LongBreakNotificationColor
+import org.ictye.attention_tool.ui.theme.PausedNotificationColor
+import org.ictye.attention_tool.ui.theme.ShortBreakNotificationColor
+import org.ictye.attention_tool.ui.theme.WorkNotificationColor
+import org.ictye.attention_tool.ui.theme.IdleNotificationColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 
 enum class PomodoroState {
     IDLE,
@@ -35,6 +43,10 @@ class ClockService : Service() {
         const val SHORT_BREAK_DURATION = 5 * 60 * 1000L
         const val LONG_BREAK_DURATION = 15 * 60 * 1000L
         const val POMODOROS_BEFORE_LONG_BREAK = 4
+        
+        const val ACTION_START = "org.ictye.attention_tool.ACTION_START"
+        const val ACTION_PAUSE = "org.ictye.attention_tool.ACTION_PAUSE"
+        const val ACTION_STOP = "org.ictye.attention_tool.ACTION_STOP"
     }
 
     var timer: CountDownTimer? = null
@@ -101,15 +113,28 @@ class ClockService : Service() {
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @SuppressLint("ForegroundServiceType")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notification = Builder( this, CHANNEL_ID )
+        val notificationBuilder = Builder(this, CHANNEL_ID)
             .setContentTitle("Pomodoro Timer")
             .setContentText("Ready to start")
             .setSmallIcon(R.drawable.clock)
+            .setOngoing(true)
+            .setSilent(true)
 
-        startForeground(NOTIFICATION_ID, notification.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            notificationBuilder.setRequestPromotedOngoing(true)
+                .setChronometerCountDown(true)
+                .setWhen(System.currentTimeMillis() + workDuration)
+                .setStyle(NotificationCompat.ProgressStyle().setProgress(0))
+                .setShortCriticalText("Ready - 25:00")
+        }
+
+        startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         
-        if (intent?.action == "RESTORE") {
-            restoreState()
+        when (intent?.action) {
+            "RESTORE" -> restoreState()
+            ACTION_START -> startTimer()
+            ACTION_PAUSE -> pauseTimer()
+            ACTION_STOP -> stopTimer()
         }
         
         return START_STICKY
@@ -347,7 +372,36 @@ class ClockService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
-        val notification = Builder( this, CHANNEL_ID )
+        val state = _pomodoroState.value
+        val remainingTime = _currentTime.value ?: 0
+        val totalDuration = when (state) {
+            PomodoroState.WORK, PomodoroState.PAUSED -> workDuration
+            PomodoroState.SHORT_BREAK -> shortBreakDuration
+            PomodoroState.LONG_BREAK -> longBreakDuration
+            else -> workDuration
+        }
+        
+        val progress = if (totalDuration > 0) {
+            ((totalDuration - remainingTime).toFloat() / totalDuration * 100).toInt()
+        } else 0
+        
+        val stateColor = when (state) {
+            PomodoroState.WORK -> WorkNotificationColor
+            PomodoroState.SHORT_BREAK -> ShortBreakNotificationColor
+            PomodoroState.LONG_BREAK -> LongBreakNotificationColor
+            PomodoroState.PAUSED -> PausedNotificationColor
+            else -> IdleNotificationColor
+        }
+        
+        val statusText = when (state) {
+            PomodoroState.WORK -> "Working"
+            PomodoroState.SHORT_BREAK -> "Short Break"
+            PomodoroState.LONG_BREAK -> "Long Break"
+            PomodoroState.PAUSED -> "Paused"
+            else -> "Ready"
+        }
+
+        val builder = Builder(this, CHANNEL_ID)
             .setContentTitle("Pomodoro Timer")
             .setContentText(text)
             .setSmallIcon(R.drawable.clock)
@@ -355,7 +409,48 @@ class ClockService : Service() {
             .setSilent(true)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-        return notification.build()
+            .setColor(stateColor.toArgb())
+            .setColorized(true)
+
+        val startPauseIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = if (state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK) {
+                ACTION_PAUSE
+            } else {
+                ACTION_START
+            }
+        }
+        val startPausePendingIntent = PendingIntent.getBroadcast(
+            this, 1, startPauseIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val stopIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getBroadcast(
+            this, 2, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val isRunning = state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK
+        
+        if (isRunning) {
+            builder.addAction(R.drawable.pause_light, "Pause", startPausePendingIntent)
+        } else {
+            builder.addAction(R.drawable.play_light, "Start", startPausePendingIntent)
+        }
+        builder.addAction(R.drawable.stop_light, "Stop", stopPendingIntent)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            builder.setRequestPromotedOngoing(true)
+                .setChronometerCountDown(true)
+                .setWhen(System.currentTimeMillis() + remainingTime)
+            
+            builder.setStyle(NotificationCompat.ProgressStyle().setProgress(progress))
+            builder.setShortCriticalText("$statusText - ${formatTime(remainingTime)}")
+        }
+
+        return builder.build()
     }
 
     override fun onDestroy() {

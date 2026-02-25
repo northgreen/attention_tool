@@ -7,11 +7,11 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.PowerManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -51,9 +51,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -68,15 +66,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import org.ictye.attention_tool.dialogs.BackgroundDialog
-import org.ictye.attention_tool.utils.ClockStateManager
-import org.ictye.attention_tool.utils.TodoManager
 import org.ictye.attention_tool.ui.theme.AttentionToolTheme
-import org.ictye.attention_tool.ui.theme.IdleColor
-import org.ictye.attention_tool.ui.theme.LongBreakColor
 import org.ictye.attention_tool.ui.theme.ShortBreakColor
 import org.ictye.attention_tool.ui.theme.WorkColor
+import org.ictye.attention_tool.utils.ClockStateManager
+import org.ictye.attention_tool.utils.TodoManager
 
 
 class MainActivity : ComponentActivity() {
@@ -222,7 +217,7 @@ class MainActivity : ComponentActivity() {
 @RequiresApi(Build.VERSION_CODES.O)
 @Preview
 @Composable
-fun PomdoroAppPreview(){
+fun PomdoroAppPreview() {
     PomodoroApp(
         showBackgroundDialog = false,
         onBackgroundDialogDismiss = {}
