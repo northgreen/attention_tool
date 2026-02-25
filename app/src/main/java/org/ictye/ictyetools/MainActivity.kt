@@ -40,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -64,6 +65,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -86,10 +88,10 @@ class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         ClockStateManager.init(this)
         TodoManager.init(this)
-        
+
         handleIntent(intent)
 
         enableEdgeToEdge()
@@ -102,17 +104,17 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
     }
-    
+
     private fun handleIntent(intent: Intent?) {
         val shouldRestore = intent?.action == "FROM_NOTIFICATION"
         bindServiceIfNeeded(restore = shouldRestore)
     }
-    
+
     private fun bindServiceIfNeeded(restore: Boolean = false) {
         if (!isBound) {
             try {
@@ -172,18 +174,19 @@ class MainActivity : ComponentActivity() {
                 return
             }
         }
-        
+
         startClockServiceInternal()
     }
 
     private fun checkBackgroundRestriction() {
         if (hasShownBackgroundRestrictionDialog) return
-        
+
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         val packageName = packageName
-        
-        val isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(packageName)
-        
+
+        val isIgnoringBatteryOptimizations =
+            powerManager.isIgnoringBatteryOptimizations(packageName)
+
         if (!isIgnoringBatteryOptimizations) {
             hasShownBackgroundRestrictionDialog = true
             showBackgroundDialog = true
@@ -216,6 +219,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
+@Preview
+@Composable
+fun PomdoroAppPreview(){
+    PomodoroApp(
+        showBackgroundDialog = false,
+        onBackgroundDialogDismiss = {}
+    )
+}
+
 @SuppressLint("BatteryLife")
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -236,17 +249,18 @@ fun PomodoroApp(
             AppDestinations.entries.forEach {
                 item(
                     icon = {
-                        if (it == AppDestinations.HOME) {
-                            Icon(
-                                painter = painterResource(R.drawable.clock),
-                                contentDescription = it.label
-                            )
-                        } else {
-                            Icon(
-                                it.icon,
-                                contentDescription = it.label
-                            )
-                        }
+                        if (it.imageVector != null) Icon(
+                            it.imageVector,
+                            contentDescription = it.label
+                        )
+                        else if (it.icon != null) Icon(
+                            painter = painterResource(it.icon),
+                            contentDescription = it.label
+                        )
+                        else Icon(
+                            Icons.Default.Warning,
+                            contentDescription = it.label
+                        )
                     },
                     label = { Text(it.label) },
                     selected = it == currentDestination,
@@ -261,8 +275,16 @@ fun PomodoroApp(
             AnimatedContent(
                 targetState = currentDestination,
                 transitionSpec = {
-                    (fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.92f, animationSpec = tween(300)))
-                        .togetherWith(fadeOut(animationSpec = tween(300)) + scaleOut(targetScale = 0.92f, animationSpec = tween(300)))
+                    (fadeIn(animationSpec = tween(300)) + scaleIn(
+                        initialScale = 0.92f,
+                        animationSpec = tween(300)
+                    ))
+                        .togetherWith(
+                            fadeOut(animationSpec = tween(300)) + scaleOut(
+                                targetScale = 0.92f,
+                                animationSpec = tween(300)
+                            )
+                        )
                 },
                 label = "pageTransition"
             ) { destination ->
@@ -271,6 +293,7 @@ fun PomodoroApp(
                         modifier = Modifier.padding(innerPadding),
                         onSettingsClick = { currentDestination = AppDestinations.SETTINGS }
                     )
+
                     AppDestinations.TODO -> TodoScreen(modifier = Modifier.padding(innerPadding))
                     AppDestinations.SETTINGS -> SettingsScreen(
                         modifier = Modifier.padding(innerPadding),
@@ -291,31 +314,32 @@ fun PomodoroApp(
 fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Unit) {
     val context = LocalContext.current
     val mainActivity = context as MainActivity
-    
+
     var tick by remember { mutableIntStateOf(0) }
-    
+
     val time = remember(tick) {
-        mainActivity.clockServiceBinder?.service?.currentTime?.value 
+        mainActivity.clockServiceBinder?.service?.currentTime?.value
             ?: ClockStateManager.getCurrentTime()
     }
     val state = remember(tick) {
-        mainActivity.clockServiceBinder?.service?.pomodoroState?.value 
+        mainActivity.clockServiceBinder?.service?.pomodoroState?.value
             ?: ClockStateManager.getState()
     }
     val completedPomodoros = remember(tick) {
-        mainActivity.clockServiceBinder?.service?.completedPomodoros?.value 
+        mainActivity.clockServiceBinder?.service?.completedPomodoros?.value
             ?: ClockStateManager.getCompletedPomodoros()
     }
-    
-    val isRunning = state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK
-    
+
+    val isRunning =
+        state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK
+
     LaunchedEffect(Unit) {
         while (true) {
             tick++
             delay(100)
         }
     }
-    
+
     val totalTime = when (state) {
         PomodoroState.WORK, PomodoroState.PAUSED -> ClockService.WORK_DURATION
         PomodoroState.SHORT_BREAK -> ClockService.SHORT_BREAK_DURATION
@@ -352,9 +376,9 @@ fun PomodoroTimerScreen(modifier: Modifier = Modifier, onSettingsClick: () -> Un
         verticalArrangement = Arrangement.Center
     ) {
         TimerHeader(onSettingsClick = onSettingsClick)
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
             text = stateText,
             style = MaterialTheme.typography.headlineMedium,
@@ -392,7 +416,9 @@ private fun formatTime(millis: Long): String {
 @Composable
 private fun TimerHeader(onSettingsClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.End
     ) {
         IconButton(onClick = onSettingsClick) {
@@ -435,6 +461,7 @@ private fun TimerDisplay(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun TimerControls(
     isRunning: Boolean,
@@ -446,7 +473,7 @@ private fun TimerControls(
         animationSpec = tween(durationMillis = 500),
         label = "buttonColor"
     )
-    
+
     Row(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -511,9 +538,10 @@ private fun TimerControls(
 
 enum class AppDestinations(
     val label: String,
-    val icon: ImageVector,
+    val imageVector: ImageVector?,
+    val icon: Int? = null
 ) {
-    HOME("Pomodoro", Icons.Default.Refresh),
+    HOME("Pomodoro", null, R.drawable.clock),
     TODO("Todo", Icons.AutoMirrored.Filled.List),
     SETTINGS("Settings", Icons.Default.Settings)
 }
