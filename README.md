@@ -11,6 +11,10 @@ A simple Android app , featuring Pomodoro timer and todo list management, for he
 - Pomodoro Timer
 - Todo List
 
+![main_screen.png](image/main_screen.png)
+
+![todo_list.png](image/todo_list.png)
+
 ## Build
 
 ```bash

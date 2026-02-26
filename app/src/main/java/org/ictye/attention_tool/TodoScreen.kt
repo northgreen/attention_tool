@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -665,8 +666,7 @@ private fun TodoListItem(
             ListItem(
                 modifier = Modifier
                     .clickable { onEdit() }
-                    .padding(0.dp)
-                    .height(50.dp),
+                    .padding(0.dp) ,
                 headlineContent = {
                     Text(
                         text = todo.text,
@@ -684,9 +684,9 @@ private fun TodoListItem(
                 },
                 supportingContent = {
                     if (todo.priority != null || todo.projects.isNotEmpty() || todo.creationDate != null || todo.dueDate != null || todo.tags.isNotEmpty()) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(0.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             todo.priority?.let {
                                 Text(
