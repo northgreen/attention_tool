@@ -1,5 +1,6 @@
 package org.ictye.attention_tool
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -13,7 +14,11 @@ import android.os.Binder
 import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.annotation.RequiresApi
+import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationCompat.Builder
 import androidx.lifecycle.LiveData
@@ -24,7 +29,6 @@ import org.ictye.attention_tool.ui.theme.PausedNotificationColor
 import org.ictye.attention_tool.ui.theme.ShortBreakNotificationColor
 import org.ictye.attention_tool.ui.theme.WorkNotificationColor
 import org.ictye.attention_tool.ui.theme.IdleNotificationColor
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
 enum class PomodoroState {
@@ -49,10 +53,11 @@ class ClockService : Service() {
         const val ACTION_STOP = "org.ictye.attention_tool.ACTION_STOP"
     }
 
+    /// The timer that counts down the time.
     var timer: CountDownTimer? = null
 
     val binder: ClockBinder = ClockBinder()
-    private val _currentTime = MutableLiveData<Long>(WORK_DURATION)
+    private val _currentTime = MutableLiveData(WORK_DURATION)
     val currentTime: LiveData<Long> get() = _currentTime
 
     private val _pomodoroState = MutableLiveData(PomodoroState.IDLE)
@@ -148,7 +153,15 @@ class ClockService : Service() {
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             enableVibration(true)
+            setSound(
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
             description = "Notifications for Pomodoro Timer"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(serviceChannel)
@@ -160,16 +173,17 @@ class ClockService : Service() {
         longBreakDuration = longBreak
     }
 
-    fun startTimer() {
-        val state = _pomodoroState.value
-        if (state == PomodoroState.PAUSED) {
-            resumeTimer()
-        } else if (state == PomodoroState.IDLE || state == null) {
-            startWork()
-        } else if (state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK) {
-            resumeTimer()
+    fun startTimer() = when (_pomodoroState.value) {
+            PomodoroState.PAUSED -> {
+                resumeTimer()
+            }
+            PomodoroState.IDLE, null -> {
+                startWork()
+            }
+            PomodoroState.WORK, PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> {
+                resumeTimer()
+            }
         }
-    }
 
     private fun resumeTimer() {
         val remainingTime = _currentTime.value
@@ -194,6 +208,7 @@ class ClockService : Service() {
             override fun onTick(millisUntilFinished: Long) {
                 updateTimer(millisUntilFinished)
             }
+            @RequiresPermission(Manifest.permission.VIBRATE)
             override fun onFinish() {
                 onTimerFinished()
             }
@@ -263,6 +278,7 @@ class ClockService : Service() {
             override fun onTick(millisUntilFinished: Long) {
                 updateTimer(millisUntilFinished)
             }
+            @RequiresPermission(Manifest.permission.VIBRATE)
             override fun onFinish() {
                 onTimerFinished()
             }
@@ -278,6 +294,7 @@ class ClockService : Service() {
             override fun onTick(millisUntilFinished: Long) {
                 updateTimer(millisUntilFinished)
             }
+            @RequiresPermission(Manifest.permission.VIBRATE)
             override fun onFinish() {
                 onTimerFinished()
             }
@@ -293,6 +310,7 @@ class ClockService : Service() {
             override fun onTick(millisUntilFinished: Long) {
                 updateTimer(millisUntilFinished)
             }
+            @RequiresPermission(Manifest.permission.VIBRATE)
             override fun onFinish() {
                 onTimerFinished()
             }
@@ -310,12 +328,14 @@ class ClockService : Service() {
             PomodoroState.LONG_BREAK -> "Long Break"
             else -> "Ready"
         }
-        updateNotification("$stateText - ${formatTime(millisUntilFinished)}")
+        updateNotification("$stateText - ${formatTime(millisUntilFinished)}", silent = true)
     }
 
+    @RequiresPermission(Manifest.permission.VIBRATE)
     private fun onTimerFinished() {
         val state = _pomodoroState.value
         playNotificationSound()
+        vibrate()
 
         when (state) {
             PomodoroState.WORK -> {
@@ -323,15 +343,15 @@ class ClockService : Service() {
                 _completedPomodoros.postValue(completed)
                 
                 if (completed % POMODOROS_BEFORE_LONG_BREAK == 0) {
-                    updateNotification("Work finished! Time for a long break")
+                    updateNotification("Work finished! Time for a long break", silent = false)
                     startLongBreak()
                 } else {
-                    updateNotification("Work finished! Time for a short break")
+                    updateNotification("Work finished! Time for a short break", silent = false)
                     startShortBreak()
                 }
             }
             PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> {
-                updateNotification("Break finished! Ready to work")
+                updateNotification("Break finished! Ready to work", silent = false)
                 startWork()
             }
             else -> {}
@@ -348,6 +368,27 @@ class ClockService : Service() {
         }
     }
 
+    @RequiresPermission(Manifest.permission.VIBRATE)
+    private fun vibrate() {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                vibratorManager.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(VIBRATOR_SERVICE) as Vibrator
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(500)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     @SuppressLint("DefaultLocale")
     private fun formatTime(millis: Long): String {
         val totalSeconds = millis / 1000
@@ -356,13 +397,13 @@ class ClockService : Service() {
         return String.format("%02d:%02d", minutes, seconds)
     }
 
-    private fun updateNotification(text: String) {
-        val notification = buildNotification(text)
+    private fun updateNotification(text: String, silent: Boolean = true) {
+        val notification = buildNotification(text, silent)
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(text: String, silent: Boolean = true): Notification {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             action = "FROM_NOTIFICATION"
@@ -406,11 +447,16 @@ class ClockService : Service() {
             .setContentText(text)
             .setSmallIcon(R.drawable.clock)
             .setOngoing(true)
-            .setSilent(true)
+            .setSilent(silent)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setColor(stateColor.toArgb())
             .setColorized(true)
+
+        if (!silent) {
+            builder.setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+        }
 
         val startPauseIntent = Intent(this, NotificationActionReceiver::class.java).apply {
             action = if (state == PomodoroState.WORK || state == PomodoroState.SHORT_BREAK || state == PomodoroState.LONG_BREAK) {
