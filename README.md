@@ -4,19 +4,12 @@
   <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" width="128" height="128" alt="AttentionTool Icon"/>
 </div>
 
-A productivity Android app built with Kotlin and Jetpack Compose, featuring Pomodoro timer and todo list management.
+A simple Android app , featuring Pomodoro timer and todo list management, for helping you stay focused on your tasks.
 
 ## Features
 
 - Pomodoro Timer
 - Todo List
-- Settings
-
-## Tech Stack
-
-- Kotlin
-- Jetpack Compose
-- Android
 
 ## Build
 
@@ -24,8 +17,17 @@ A productivity Android app built with Kotlin and Jetpack Compose, featuring Pomo
 ./gradlew assembleDebug
 ```
 
-## Install
 
-```bash
-adb install app/build/outputs/apk/debug/app-debug.apk
-```
+## Troubleshooting
+
+### Timer not running in background
+- Grant "Background activity" permission for this app in system settings
+
+### No notification sound
+- Check notification sound settings in system preferences
+- Ensure "Do Not Disturb" mode is off,or allow the app to show notifications in "Do Not Disturb" mode
+
+### Notifications not appearing
+- Grant "Notifications" permission when prompted
+- Check battery optimization settings may restrict notifications
+
